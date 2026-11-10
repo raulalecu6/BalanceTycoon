@@ -99,7 +99,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete capturas --yes --cleanup-tag || true
-          gh release create capturas capturas/* \
+          # GitHub no admite archivos vacíos (p. ej., el registro de errores cuando no hay ninguno).
+          gh release create capturas $(find capturas -type f -size +0c | sort) \
             --title "Capturas automáticas" \
             --notes "Capturas del emulador generadas automáticamente a partir del commit ${GITHUB_SHA::7}." \
             --prerelease
