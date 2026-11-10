@@ -127,7 +127,7 @@ private fun CaseCard(pc: PendingCase, engine: GameEngine, lang: Lang, onAnswer: 
                 border = BorderStroke(2.dp, Palette.Mint.copy(alpha = 0.6f)),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Cream),
             ) {
-                Text(t.options[option].get(lang), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                Text(t.options[option].get(lang), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start, style = MaterialTheme.typography.bodyLarge)
             }
         }
         Hint(stringResource(R.string.case_auto, daysLeft.toInt()))

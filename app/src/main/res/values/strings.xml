@@ -59,7 +59,7 @@
     <string name="fee_multiplier">Fees ×%1$s for the type of client</string>
     <string name="managed_wealth">Your clients\' wealth</string>
     <string name="client_count">%1$d clients on the books</string>
-    <string name="streak">Streak: %1$d (+%2$d %% fees)</string>
+    <string name="streak">Streak: %1$d · +%2$d %% fees</string>
     <string name="cases_stats">%1$d of %2$d right · %3$d solved by your team · best streak %4$d</string>
     <string name="cases_empty">No pending questions. A new one arrives every two days.</string>
     <string name="tiers_title">Types of client</string>

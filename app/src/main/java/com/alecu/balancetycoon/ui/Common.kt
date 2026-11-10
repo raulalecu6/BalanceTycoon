@@ -28,7 +28,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -142,6 +147,24 @@ fun Hint(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant
     Text(text, style = MaterialTheme.typography.bodySmall, color = color)
 }
 
+/**
+ * Texto para la fuente pixelada: el símbolo del euro de Pixelify Sans se confunde con una «B»,
+ * así que se dibuja con la fuente del sistema.
+ */
+fun pixelString(text: String): AnnotatedString = buildAnnotatedString {
+    var start = 0
+    while (true) {
+        val i = text.indexOf('€', start)
+        if (i < 0) {
+            append(text.substring(start))
+            break
+        }
+        append(text.substring(start, i))
+        withStyle(SpanStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold)) { append("€") }
+        start = i + 1
+    }
+}
+
 /** Texto con la fuente pixelada. */
 @Composable
 fun PixelText(
@@ -153,7 +176,7 @@ fun PixelText(
     maxLines: Int = 1,
 ) {
     Text(
-        text,
+        pixelString(text),
         modifier = modifier,
         fontFamily = PixelFont,
         fontSize = size,
@@ -186,6 +209,7 @@ fun GameButton(
             .background(shadow)
             .border(2.dp, Palette.Stroke, RoundedCornerShape(8.dp))
             .clickable(enabled = enabled, onClick = onClick),
+        propagateMinConstraints = true,
     ) {
         Column(
             Modifier
@@ -237,7 +261,7 @@ fun GameProgressBar(progress: Float, text: String?, modifier: Modifier = Modifie
                 .background(color),
         )
         if (text != null) {
-            PixelText(text, size = 12.sp, color = Palette.Cream, align = TextAlign.Center)
+            PixelText(text, size = 12.sp, color = if (progress >= 0.5f) Palette.Stroke else Palette.Cream, align = TextAlign.Center)
         }
     }
 }

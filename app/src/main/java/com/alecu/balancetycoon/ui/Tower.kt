@@ -149,10 +149,13 @@ fun Tower(
                 val t = ((frame - f.start) / 1300f).coerceIn(0f, 1f)
                 val top = geo.floorTop(f.floor)
                 val style = TextStyle(fontFamily = PixelFont, fontSize = with(density) { (geo.u * 3.6f).toSp() }, color = Palette.Gold)
-                val layout = measurer.measure(f.text, style)
+                val layout = measurer.measure(pixelString(f.text), style)
                 val x = geo.mainLeft + LEFT_UNITS * geo.u + f.x * (geo.mainW - LEFT_UNITS * geo.u - layout.size.width)
-                val y = top + geo.floorH * (0.45f - 0.4f * t)
-                drawText(layout, topLeft = Offset(x + 1.5f, y + 1.5f), color = Palette.Stroke, alpha = 1f - t)
+                val y = top + geo.floorH * (0.5f - 0.35f * t)
+                val o = geo.u * 0.35f
+                for ((dx, dy) in listOf(-o to 0f, o to 0f, 0f to -o, 0f to o, o to o)) {
+                    drawText(layout, topLeft = Offset(x + dx, y + dy), color = Palette.Stroke, alpha = 1f - t)
+                }
                 drawText(layout, topLeft = Offset(x, y), alpha = 1f - t)
             }
         }
@@ -171,15 +174,23 @@ private fun shade(c: Color, f: Float): Color = Color((c.red * f).coerceIn(0f, 1f
 
 private fun DrawScope.label(
     measurer: TextMeasurer, density: Density, text: String, x: Float, y: Float, sizeUnits: Float, u: Float,
-    color: Color = Palette.Cream, centered: Boolean = false, shadow: Boolean = true, maxWidth: Float? = null,
+    color: Color = Palette.Cream, centered: Boolean = false, shadow: Boolean = true, maxWidth: Float? = null, pill: Boolean = false,
 ) {
     val style = TextStyle(fontFamily = PixelFont, fontSize = with(density) { (u * sizeUnits).toSp() }, color = color)
     val layout = if (maxWidth != null) {
-        measurer.measure(text, style, maxLines = 1, constraints = androidx.compose.ui.unit.Constraints(maxWidth = max(1, maxWidth.toInt())), overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        measurer.measure(pixelString(text), style, maxLines = 1, constraints = androidx.compose.ui.unit.Constraints(maxWidth = max(1, maxWidth.toInt())), overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     } else {
-        measurer.measure(text, style)
+        measurer.measure(pixelString(text), style)
     }
     val left = if (centered) x - layout.size.width / 2f else x
+    if (pill) {
+        drawRoundRect(
+            Palette.Stroke.copy(alpha = 0.72f),
+            topLeft = Offset(left - u * 0.8f, y - u * 0.2f),
+            size = Size(layout.size.width + u * 1.6f, layout.size.height + u * 0.4f),
+            cornerRadius = CornerRadius(u, u),
+        )
+    }
     if (shadow) drawText(layout, topLeft = Offset(left + u * 0.4f, y + u * 0.4f), color = Palette.Stroke)
     drawText(layout, topLeft = Offset(left, y))
 }
@@ -384,9 +395,9 @@ private fun DrawScope.drawFloor(
     px(ox, oy, u, 10f, 11.5f, 2f, 2f, Color(0xFF5DBB63))
 
     // Etiqueta del departamento.
-    label(m, density, "${def.emoji} ${def.name.get(lang)}", ox + 1.5f * u, oy + 1.6f * u, 3.3f, u, maxWidth = (LEFT_UNITS + 14f) * u)
-    val levelText = (if (lang == Lang.ES) "Nv. " else "Lv. ") + d.level
-    label(m, density, levelText, ox + 1.5f * u, oy + 5.7f * u, 2.6f, u, Palette.Stroke, shadow = false)
+    val levelText = (if (lang == Lang.ES) " · Nv. " else " · Lv. ") + d.level
+    label(m, density, "${def.emoji} ${def.name.get(lang)}$levelText", ox + 1.8f * u, oy + 1.7f * u, 3.1f, u,
+        maxWidth = (w - 4f) * u, pill = true, shadow = false)
 
     // Puestos de trabajo.
     val desks = engine.office().desksPerFloor
@@ -431,15 +442,15 @@ private fun DrawScope.drawFloor(
     } else {
         // Sin trabajadores: hay que tocar para que el jefe tramite el expediente.
         val pulse = (sin(frame / 220.0) * 0.5 + 0.5).toFloat()
-        val text = if (lang == Lang.ES) "👆 ¡Toca para tramitar!" else "👆 Tap to process!"
+        val text = if (lang == Lang.ES) "👆 Toca para tramitar" else "👆 Tap to process"
         drawRoundRect(
             Palette.Stroke.copy(alpha = 0.75f),
             topLeft = Offset(ox + (slotsLeft + 1f) * u, oy + 6.5f * u),
             size = Size((w - slotsLeft - 3f) * u, 5f * u),
             cornerRadius = CornerRadius(u, u),
         )
-        label(m, density, text, ox + (slotsLeft + (w - slotsLeft - 1f) / 2f) * u, oy + 7.1f * u, 3f, u,
-            Palette.Gold.copy(alpha = 0.6f + 0.4f * pulse), centered = true, shadow = false)
+        label(m, density, text, ox + (slotsLeft + (w - slotsLeft - 1f) / 2f) * u, oy + 7.3f * u, 2.8f, u,
+            Palette.Gold.copy(alpha = 0.6f + 0.4f * pulse), centered = true, shadow = false, maxWidth = (w - slotsLeft - 4f) * u)
     }
 }
 
@@ -596,7 +607,7 @@ private fun DrawScope.drawLobby(g: TowerGeometry, pendingCases: Int, lang: Lang,
             if (pendingCases == 1) "1 question!" else "$pendingCases questions!"
         }
         val style = TextStyle(fontFamily = PixelFont, fontSize = with(density) { (u * 3f).toSp() }, color = Palette.Stroke)
-        val layout = m.measure(text, style)
+        val layout = m.measure(pixelString(text), style)
         val bw = layout.size.width + 3f * u
         val bh = layout.size.height + 1.5f * u
         val bxPx = ox + (bx + 4.5f) * u

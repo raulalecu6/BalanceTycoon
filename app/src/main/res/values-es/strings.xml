@@ -59,7 +59,7 @@
     <string name="fee_multiplier">Honorarios ×%1$s por el tipo de cliente</string>
     <string name="managed_wealth">Patrimonio de tus clientes</string>
     <string name="client_count">%1$d clientes en cartera</string>
-    <string name="streak">Racha: %1$d (+%2$d %% de honorarios)</string>
+    <string name="streak">Racha: %1$d · +%2$d %% de honorarios</string>
     <string name="cases_stats">%1$d de %2$d bien · %3$d resueltas por tu equipo · mejor racha %4$d</string>
     <string name="cases_empty">No hay consultas pendientes. Llega una nueva cada dos días.</string>
     <string name="tiers_title">Tipos de cliente</string>
