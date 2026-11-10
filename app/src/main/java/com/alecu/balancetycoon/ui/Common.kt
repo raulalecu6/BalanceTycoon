@@ -30,6 +30,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -174,9 +177,11 @@ fun PixelText(
     color: Color = Palette.Cream,
     align: TextAlign? = null,
     maxLines: Int = 1,
+    shadow: Boolean = false,
 ) {
     Text(
         pixelString(text),
+        style = if (shadow) TextStyle(shadow = Shadow(Palette.Stroke, Offset(2f, 2f), 0f)) else TextStyle.Default,
         modifier = modifier,
         fontFamily = PixelFont,
         fontSize = size,
@@ -261,7 +266,7 @@ fun GameProgressBar(progress: Float, text: String?, modifier: Modifier = Modifie
                 .background(color),
         )
         if (text != null) {
-            PixelText(text, size = 12.sp, color = if (progress >= 0.5f) Palette.Stroke else Palette.Cream, align = TextAlign.Center)
+            PixelText(text, size = 12.sp, color = Palette.Cream, align = TextAlign.Center, shadow = true)
         }
     }
 }

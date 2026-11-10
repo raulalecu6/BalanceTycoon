@@ -394,10 +394,6 @@ private fun DrawScope.drawFloor(
     px(ox, oy, u, 9f, 13f, 4f, 4f, Color(0xFF3E8E41))
     px(ox, oy, u, 10f, 11.5f, 2f, 2f, Color(0xFF5DBB63))
 
-    // Etiqueta del departamento.
-    val levelText = (if (lang == Lang.ES) " · Nv. " else " · Lv. ") + d.level
-    label(m, density, "${def.emoji} ${def.name.get(lang)}$levelText", ox + 1.8f * u, oy + 1.7f * u, 3.1f, u,
-        maxWidth = (w - 4f) * u, pill = true, shadow = false)
 
     // Puestos de trabajo.
     val desks = engine.office().desksPerFloor
@@ -421,6 +417,11 @@ private fun DrawScope.drawFloor(
         px(ox, oy, u, cx + 0.4f, 3.7f, 2.6f, 0.5f, Color(0xFFFFF4C2))
     }
 
+    // Etiqueta del departamento, encima de las lámparas para que se lea siempre.
+    val levelText = (if (lang == Lang.ES) " · Nv. " else " · Lv. ") + d.level
+    label(m, density, "${def.emoji} ${def.name.get(lang)}$levelText", ox + 1.8f * u, oy + 1.7f * u, 3.1f, u,
+        maxWidth = (w - 4f) * u, pill = true, shadow = false)
+
     // Barra de progreso del expediente sobre el suelo.
     val barX = slotsLeft
     val barW = w - slotsLeft - 1.5f
@@ -442,7 +443,7 @@ private fun DrawScope.drawFloor(
     } else {
         // Sin trabajadores: hay que tocar para que el jefe tramite el expediente.
         val pulse = (sin(frame / 220.0) * 0.5 + 0.5).toFloat()
-        val text = if (lang == Lang.ES) "👆 Toca para tramitar" else "👆 Tap to process"
+        val text = if (lang == Lang.ES) "👆 ¡Toca aquí!" else "👆 Tap here!"
         drawRoundRect(
             Palette.Stroke.copy(alpha = 0.75f),
             topLeft = Offset(ox + (slotsLeft + 1f) * u, oy + 6.5f * u),
