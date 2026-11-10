@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English (default). Game content (accounts, documents, entries) comes from the core module in both languages. -->
+<resources>
+    <string name="app_name">Balance Tycoon</string>
+    <string name="default_company">My Company, S.L.</string>
+    <string name="loading">Opening the books…</string>
+
+    <string name="tab_business">Business</string>
+    <string name="tab_inbox">Inbox</string>
+    <string name="tab_books">Books</string>
+    <string name="tab_tax">Tax</string>
+
+    <string name="cash">Bank</string>
+    <string name="public_debt">Owed to tax and SS</string>
+    <string name="credit_line">Credit line drawn: %1$s</string>
+    <string name="settings">Settings</string>
+
+    <string name="buy_x1">×1</string>
+    <string name="buy_x10">×10</string>
+    <string name="buy_max">Max</string>
+    <string name="sales_per_min">Sales per minute</string>
+    <string name="multiplier">Multiplier ×%1$s</string>
+    <string name="boost_title">Sales boost ×2</string>
+    <string name="boost_watch">Watch an ad (2 h)</string>
+    <string name="boost_active">Active: %1$s left</string>
+    <string name="ad_simulated">Simulated ad: boost activated.</string>
+
+    <string name="level">Lv. %1$d</string>
+    <string name="next_milestone">Next milestone: level %1$d (cycle ×2)</string>
+    <string name="vat_rate">VAT %1$s</string>
+    <string name="collect_cash">paid in cash</string>
+    <string name="collect_credit">%1$s on %2$d days\' credit</string>
+    <string name="open_for">Open · %1$s + VAT</string>
+    <string name="sale_per_cycle">Sale per cycle: %1$s + %2$s VAT</string>
+    <string name="cycle_time">Cycle: %1$s s</string>
+    <string name="sell">Sell</string>
+    <string name="selling">Selling…</string>
+    <string name="expand">Expand ×%1$d · %2$s + VAT</string>
+    <string name="expand_none">Not enough cash to expand</string>
+    <string name="hire">Hire %1$s · %2$s/month</string>
+    <string name="manager_working">%1$s keeps it selling non-stop</string>
+    <string name="fire">Dismiss</string>
+    <string name="asset_line">Fixed assets: %1$s (%2$s) · %3$s</string>
+
+    <string name="inbox_streak">Accuracy streak: %1$d (+%2$s sales)</string>
+    <string name="inbox_best">Best streak: %1$d · Correct: %2$d of %3$d</string>
+    <string name="assistant_title">Accounting assistant</string>
+    <string name="assistant_desc">Books every document automatically. Keeps your streak but does not raise it. %1$s/month.</string>
+    <string name="hire_short">Hire</string>
+    <string name="inbox_empty">The inbox is empty. A new document arrives every two days.</string>
+    <string name="doc_received">Received %1$s · the accountancy firm will book it in %2$d days</string>
+    <string name="doc_base">Tax base</string>
+    <string name="doc_vat">VAT (%1$s)</string>
+    <string name="doc_vat_exempt">VAT exempt</string>
+    <string name="doc_withholding">Income tax withholding (%1$s)</string>
+    <string name="doc_total">Total to pay</string>
+    <string name="doc_question">Which account does this expense go to?</string>
+    <string name="feedback_correct">Correct!</string>
+    <string name="feedback_wrong">Not quite</string>
+    <string name="feedback_account">Correct account: %1$s</string>
+    <string name="feedback_booked">The entry has been booked in the correct account.</string>
+    <string name="dismiss">Got it</string>
+
+    <string name="books_journal">Journal</string>
+    <string name="books_ledger">Ledger</string>
+    <string name="books_pyg">P&amp;L</string>
+    <string name="books_balance">Balance sheet</string>
+    <string name="journal_entry">No. %1$d · %2$s</string>
+    <string name="debit">Debit</string>
+    <string name="credit">Credit</string>
+    <string name="balance_col">Balance</string>
+    <string name="journal_note">Showing the latest %1$d entries. Daily sales are booked as summary entries (art. 28.2 Spanish Commercial Code).</string>
+    <string name="pyg_title">Income statement %1$d (year to date)</string>
+    <string name="pyg_operating">A) Operating result</string>
+    <string name="pyg_financial">B) Financial result</string>
+    <string name="pyg_before_tax">C) Result before tax</string>
+    <string name="pyg_net">D) Result for the year</string>
+    <string name="bs_title">Balance sheet at %1$s</string>
+    <string name="bs_assets">ASSETS</string>
+    <string name="bs_equity_liab">EQUITY AND LIABILITIES</string>
+    <string name="bs_total_assets">Total assets</string>
+    <string name="bs_total_eq_liab">Total equity and liabilities</string>
+    <string name="bs_balanced">✓ Balanced: assets = equity + liabilities</string>
+    <string name="bs_unbalanced">✗ Out of balance</string>
+    <string name="last_year">Year %1$d closed</string>
+    <string name="last_year_detail">Revenue %1$s · Result %2$s · Corporate tax %3$s</string>
+
+    <string name="tax_vat_title">VAT this quarter (estimate)</string>
+    <string name="tax_vat_output">Output VAT (477)</string>
+    <string name="tax_vat_input">Input VAT (472)</string>
+    <string name="tax_vat_prev">Credit from earlier quarters (4700)</string>
+    <string name="tax_vat_pay">To pay</string>
+    <string name="tax_vat_credit">To carry forward</string>
+    <string name="tax_vat_note">The VAT you collect is not yours: keep it for form 303.</string>
+    <string name="tax_is_title">Corporate tax (estimate for %1$d)</string>
+    <string name="tax_is_regime">Regime: %1$s</string>
+    <string name="tax_is_quota">Estimated tax on the result so far: %1$s</string>
+    <string name="tax_due_title">Pending payments</string>
+    <string name="tax_none_due">Nothing pending.</string>
+    <string name="tax_due_date">Due %1$s (%2$s)</string>
+    <string name="days_left">in %1$d days</string>
+    <string name="due_today">today</string>
+    <string name="overdue">%1$d days late</string>
+    <string name="pay_now">Pay now (no fee)</string>
+    <string name="pay_late">Pay with %1$s surcharge</string>
+    <string name="gestoria_title">External accountancy firm</string>
+    <string name="gestoria_on">Files every return on the last day for €45 + VAT. Paying earlier yourself saves the fee.</string>
+    <string name="gestoria_off" formatted="false">Disabled: returns not paid on time carry the art. 27 LGT surcharge (1% plus 1% per full month).</string>
+    <string name="distribution_title">Appropriation of the %1$d profit</string>
+    <string name="distribution_desc" formatted="false">The general meeting must decide by 30 June. The legal reserve comes first (10% of profit until it reaches 20% of capital, art. 274 LSC), and dividends cannot leave equity below share capital (art. 273 LSC).</string>
+    <string name="distribution_profit">Profit</string>
+    <string name="distribution_legal">Legal reserve (112)</string>
+    <string name="distribution_losses">Offset of prior losses (121)</string>
+    <string name="distribution_max_div">Maximum dividend</string>
+    <string name="distribution_all_reserves">All to reserves</string>
+    <string name="distribution_half">Half as dividend</string>
+    <string name="distribution_max">Maximum dividend</string>
+    <string name="owner_wealth">Your personal wealth (net dividends): %1$s</string>
+    <string name="history_title">Recent payments</string>
+    <string name="paid_by_player">paid by you</string>
+    <string name="paid_by_gestoria">filed by the firm</string>
+    <string name="paid_by_bank">direct debit</string>
+
+    <string name="offline_title">While you were away</string>
+    <string name="offline_body">%1$s · %2$d accounting days</string>
+    <string name="offline_sales">Sales: %1$s</string>
+    <string name="offline_cash">Change in bank: %1$s</string>
+    <string name="offline_entries">Entries booked: %1$d</string>
+    <string name="offline_capped">Away progress is capped at 8 hours.</string>
+    <string name="continue_btn">Continue</string>
+    <string name="hours_minutes">%1$d h %2$d min</string>
+    <string name="minutes">%1$d min</string>
+
+    <string name="settings_company">Company</string>
+    <string name="settings_reset">Start a new company</string>
+    <string name="settings_reset_confirm">Your current game will be deleted. Continue?</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="close">Close</string>
+    <string name="about_title">About</string>
+    <string name="about_body">Prototype 0.1 by Raúl Marian Alecu. The accounting follows the Spanish SME chart of accounts (PGC PYMES) and 2026 tax rules in simplified form. It is not tax or accounting advice.</string>
+</resources>

@@ -1,0 +1,16 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*/build/
+/app/release/
+*.keystore
+*.jks
+
+# La clave de depuración sí se versiona (ver app/build.gradle.kts)
+!app/debug.keystore

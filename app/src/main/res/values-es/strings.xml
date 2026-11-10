@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Español. El contenido del juego (cuentas, documentos, asientos) viene del módulo core en los dos idiomas. -->
+<resources>
+    <string name="app_name">Balance Tycoon</string>
+    <string name="default_company">Mi Empresa, S.L.</string>
+    <string name="loading">Abriendo los libros…</string>
+
+    <string name="tab_business">Negocio</string>
+    <string name="tab_inbox">Bandeja</string>
+    <string name="tab_books">Libros</string>
+    <string name="tab_tax">Hacienda</string>
+
+    <string name="cash">Banco</string>
+    <string name="public_debt">Pendiente con Hacienda y SS</string>
+    <string name="credit_line">Póliza dispuesta: %1$s</string>
+    <string name="settings">Ajustes</string>
+
+    <string name="buy_x1">×1</string>
+    <string name="buy_x10">×10</string>
+    <string name="buy_max">Máx.</string>
+    <string name="sales_per_min">Ventas por minuto</string>
+    <string name="multiplier">Multiplicador ×%1$s</string>
+    <string name="boost_title">Turbo de ventas ×2</string>
+    <string name="boost_watch">Ver anuncio (2 h)</string>
+    <string name="boost_active">Activo: quedan %1$s</string>
+    <string name="ad_simulated">Anuncio simulado: turbo activado.</string>
+
+    <string name="level">Nv. %1$d</string>
+    <string name="next_milestone">Próximo hito: nivel %1$d (ciclo ×2)</string>
+    <string name="vat_rate">IVA %1$s</string>
+    <string name="collect_cash">cobro al contado</string>
+    <string name="collect_credit">%1$s a %2$d días</string>
+    <string name="open_for">Abrir · %1$s + IVA</string>
+    <string name="sale_per_cycle">Venta por ciclo: %1$s + IVA %2$s</string>
+    <string name="cycle_time">Ciclo: %1$s s</string>
+    <string name="sell">Vender</string>
+    <string name="selling">Vendiendo…</string>
+    <string name="expand">Ampliar ×%1$d · %2$s + IVA</string>
+    <string name="expand_none">Sin saldo suficiente para ampliar</string>
+    <string name="hire">Contratar %1$s · %2$s/mes</string>
+    <string name="manager_working">%1$s vende sin parar</string>
+    <string name="fire">Despedir</string>
+    <string name="asset_line">Inmovilizado: %1$s (%2$s) · %3$s</string>
+
+    <string name="inbox_streak">Racha de rigor: %1$d (+%2$s en ventas)</string>
+    <string name="inbox_best">Mejor racha: %1$d · Aciertos: %2$d de %3$d</string>
+    <string name="assistant_title">Auxiliar contable</string>
+    <string name="assistant_desc">Contabiliza los documentos automáticamente. Conserva la racha, pero no la aumenta. %1$s/mes.</string>
+    <string name="hire_short">Contratar</string>
+    <string name="inbox_empty">La bandeja está vacía. Llega un documento nuevo cada dos días.</string>
+    <string name="doc_received">Recibido el %1$s · la gestoría lo contabilizará en %2$d días</string>
+    <string name="doc_base">Base imponible</string>
+    <string name="doc_vat">IVA (%1$s)</string>
+    <string name="doc_vat_exempt">Exento de IVA</string>
+    <string name="doc_withholding">Retención de IRPF (%1$s)</string>
+    <string name="doc_total">Total a pagar</string>
+    <string name="doc_question">¿A qué cuenta va este gasto?</string>
+    <string name="feedback_correct">¡Correcto!</string>
+    <string name="feedback_wrong">No es esa</string>
+    <string name="feedback_account">Cuenta correcta: %1$s</string>
+    <string name="feedback_booked">El asiento se ha registrado en la cuenta correcta.</string>
+    <string name="dismiss">Entendido</string>
+
+    <string name="books_journal">Diario</string>
+    <string name="books_ledger">Mayor</string>
+    <string name="books_pyg">PyG</string>
+    <string name="books_balance">Balance</string>
+    <string name="journal_entry">Nº %1$d · %2$s</string>
+    <string name="debit">Debe</string>
+    <string name="credit">Haber</string>
+    <string name="balance_col">Saldo</string>
+    <string name="journal_note">Se muestran los últimos %1$d asientos. Las ventas se anotan en asientos resumen diarios (art. 28.2 del Código de Comercio).</string>
+    <string name="pyg_title">Cuenta de pérdidas y ganancias %1$d (ejercicio en curso)</string>
+    <string name="pyg_operating">A) Resultado de explotación</string>
+    <string name="pyg_financial">B) Resultado financiero</string>
+    <string name="pyg_before_tax">C) Resultado antes de impuestos</string>
+    <string name="pyg_net">D) Resultado del ejercicio</string>
+    <string name="bs_title">Balance de situación a %1$s</string>
+    <string name="bs_assets">ACTIVO</string>
+    <string name="bs_equity_liab">PATRIMONIO NETO Y PASIVO</string>
+    <string name="bs_total_assets">Total activo</string>
+    <string name="bs_total_eq_liab">Total patrimonio neto y pasivo</string>
+    <string name="bs_balanced">✓ Cuadra: activo = patrimonio neto + pasivo</string>
+    <string name="bs_unbalanced">✗ Descuadre</string>
+    <string name="last_year">Ejercicio %1$d cerrado</string>
+    <string name="last_year_detail">Ventas %1$s · Resultado %2$s · IS %3$s</string>
+
+    <string name="tax_vat_title">IVA del trimestre (estimación)</string>
+    <string name="tax_vat_output">IVA repercutido (477)</string>
+    <string name="tax_vat_input">IVA soportado (472)</string>
+    <string name="tax_vat_prev">A compensar de trimestres anteriores (4700)</string>
+    <string name="tax_vat_pay">A ingresar</string>
+    <string name="tax_vat_credit">A compensar</string>
+    <string name="tax_vat_note">El IVA que cobras no es tuyo: resérvalo para el modelo 303.</string>
+    <string name="tax_is_title">Impuesto sobre Sociedades (estimación %1$d)</string>
+    <string name="tax_is_regime">Régimen: %1$s</string>
+    <string name="tax_is_quota">Cuota estimada sobre el resultado actual: %1$s</string>
+    <string name="tax_due_title">Pagos pendientes</string>
+    <string name="tax_none_due">No hay pagos pendientes.</string>
+    <string name="tax_due_date">Vence el %1$s (%2$s)</string>
+    <string name="days_left">en %1$d días</string>
+    <string name="due_today">hoy</string>
+    <string name="overdue">%1$d días de retraso</string>
+    <string name="pay_now">Pagar ya (sin comisión)</string>
+    <string name="pay_late">Pagar con recargo del %1$s</string>
+    <string name="gestoria_title">Gestoría externa</string>
+    <string name="gestoria_on">Presenta cada modelo el último día por 45 € + IVA. Si pagas antes, te ahorras la comisión.</string>
+    <string name="gestoria_off" formatted="false">Desactivada: los modelos que no pagues a tiempo llevan el recargo del art. 27 LGT (1% más un 1% por mes completo).</string>
+    <string name="distribution_title">Aplicación del resultado de %1$d</string>
+    <string name="distribution_desc" formatted="false">La junta general debe decidir antes del 30 de junio. Primero se dota la reserva legal (10% del beneficio hasta llegar al 20% del capital, art. 274 LSC) y los dividendos no pueden dejar el patrimonio neto por debajo del capital (art. 273 LSC).</string>
+    <string name="distribution_profit">Beneficio</string>
+    <string name="distribution_legal">Reserva legal (112)</string>
+    <string name="distribution_losses">Compensación de pérdidas (121)</string>
+    <string name="distribution_max_div">Dividendo máximo</string>
+    <string name="distribution_all_reserves">Todo a reservas</string>
+    <string name="distribution_half">Mitad en dividendos</string>
+    <string name="distribution_max">Dividendo máximo</string>
+    <string name="owner_wealth">Tu patrimonio personal (dividendos netos): %1$s</string>
+    <string name="history_title">Últimos pagos</string>
+    <string name="paid_by_player">pagado por ti</string>
+    <string name="paid_by_gestoria">presentado por la gestoría</string>
+    <string name="paid_by_bank">domiciliado</string>
+
+    <string name="offline_title">Mientras estabas fuera</string>
+    <string name="offline_body">%1$s · %2$d días contables</string>
+    <string name="offline_sales">Ventas: %1$s</string>
+    <string name="offline_cash">Variación del banco: %1$s</string>
+    <string name="offline_entries">Asientos registrados: %1$d</string>
+    <string name="offline_capped">El progreso fuera del juego tiene un máximo de 8 horas.</string>
+    <string name="continue_btn">Continuar</string>
+    <string name="hours_minutes">%1$d h %2$d min</string>
+    <string name="minutes">%1$d min</string>
+
+    <string name="settings_company">Empresa</string>
+    <string name="settings_reset">Empezar una empresa nueva</string>
+    <string name="settings_reset_confirm">Se borrará la partida actual. ¿Continuar?</string>
+    <string name="cancel">Cancelar</string>
+    <string name="confirm">Confirmar</string>
+    <string name="close">Cerrar</string>
+    <string name="about_title">Acerca de</string>
+    <string name="about_body">Prototipo 0.1 de Raúl Marian Alecu. La contabilidad sigue el PGC PYMES y la normativa fiscal de 2026 de forma simplificada. No constituye asesoramiento fiscal ni contable.</string>
+</resources>
