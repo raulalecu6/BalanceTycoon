@@ -5,14 +5,15 @@ Este documento sirve para continuar el desarrollo en un chat nuevo sin perder na
 ## Qué hay hecho
 
 - **Motor contable y de juego (`core`)** en Kotlin puro, compilado y probado: 24 tests en verde y una simulación de equilibrio.
-- **App Android (`app`)** con Jetpack Compose: cuatro pantallas (Negocio, Bandeja, Libros y Hacienda), progreso fuera de la app, guardado y textos en español e inglés. Está escrita pero **no se ha podido compilar en el entorno de Claude**, porque no tiene acceso a los repositorios de Google ni de Maven; la primera compilación real se hará en Android Studio.
+- **App Android (`app`)** con Jetpack Compose: cuatro pantallas (Negocio, Bandeja, Libros y Hacienda), progreso fuera de la app, guardado y textos en español e inglés. Compila en GitHub Actions desde la primera subida (10/11/2026).
+- **Repositorio y compilación automática:** https://github.com/raulalecu6/BalanceTycoon. Cada subida a `main` pasa los tests del motor, genera el APK de prueba y lo publica en la release `ultima-version`. El APK se firma con una clave de depuración fija (`app/debug.keystore`) para poder instalar cada versión encima de la anterior.
 - **Documentación:** diseño (GDD), este documento y el README.
 
 ## Cómo retomar en un chat nuevo
 
-1. Subir el zip del proyecto (o la carpeta) y este documento.
-2. Para el motor: compilar y pasar los tests con `./gradlew :core:test`. En el entorno de Claude, sin Gradle con red, se compila con el compilador de Kotlin que trae Gradle (`/opt/gradle-*/lib/kotlin-compiler-embeddable-*.jar`) y JUnit 4 (`junit-4.13.2.jar` y `hamcrest-core-1.3.jar` de la misma carpeta).
-3. Para la app: los cambios se prueban en Android Studio; si da errores de compilación, pegar el mensaje en el chat.
+1. Pedir a Claude que conecte el repositorio `raulalecu6/BalanceTycoon` (con permiso de escritura) y pasarle este documento.
+2. Los cambios se suben a `main` y GitHub Actions compila y publica el APK; los errores se leen en el registro de la ejecución.
+3. Para probar el motor sin red: compilador de Kotlin que trae Gradle (`/opt/gradle-*/lib/kotlin-compiler-embeddable-*.jar`) y JUnit 4 (`junit-4.13.2.jar` y `hamcrest-core-1.3.jar` de la misma carpeta).
 
 ## Estructura
 
@@ -96,7 +97,7 @@ BalanceTycoon/
 - Recompensas de los anuncios y precio del Premium.
 
 **Técnico (0.2)**
-- Primera compilación en Android Studio y corrección de lo que salga.
+- Probar la app en un móvil real y ajustar la interfaz con lo que se vea.
 - Pantalla de bienvenida y tutorial con el documento de la notaría.
 - Prestigio («vender la empresa») y más líneas (distribuidora y asesoría).
 - Guardado en la nube o copia de seguridad (Google Play Games o Auto Backup).
