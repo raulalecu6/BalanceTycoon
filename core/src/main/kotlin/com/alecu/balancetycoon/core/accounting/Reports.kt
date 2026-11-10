@@ -10,12 +10,13 @@ data class PygReport(
     val personnel: Long,
     val otherOpex: Long,
     val depreciation: Long,
+    val disposals: Long,
     val otherResults: Long,
     val financialIncome: Long,
     val financialExpense: Long,
     val incomeTax: Long,
 ) {
-    val operatingResult: Long get() = revenue + supplies + personnel + otherOpex + depreciation + otherResults
+    val operatingResult: Long get() = revenue + supplies + personnel + otherOpex + depreciation + disposals + otherResults
     val financialResult: Long get() = financialIncome + financialExpense
     val resultBeforeTax: Long get() = operatingResult + financialResult
     val netResult: Long get() = resultBeforeTax + incomeTax
@@ -54,6 +55,7 @@ object Reports {
             personnel = v(PygLine.PERSONNEL),
             otherOpex = v(PygLine.OTHER_OPEX),
             depreciation = v(PygLine.DEPRECIATION),
+            disposals = v(PygLine.DISPOSALS),
             otherResults = v(PygLine.OTHER_RESULTS),
             financialIncome = v(PygLine.FINANCIAL_INCOME),
             financialExpense = v(PygLine.FINANCIAL_EXPENSE),

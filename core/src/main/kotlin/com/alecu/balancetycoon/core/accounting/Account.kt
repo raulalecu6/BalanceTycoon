@@ -18,7 +18,9 @@ enum class BsSection(val title: L) {
 
 /** Epígrafes del balance a los que se agrega cada cuenta. */
 enum class BsLine(val section: BsSection, val title: L) {
+    INTANGIBLE(BsSection.NON_CURRENT_ASSETS, L("Inmovilizado intangible", "Intangible assets")),
     PPE(BsSection.NON_CURRENT_ASSETS, L("Inmovilizado material", "Property, plant and equipment")),
+    LT_INVESTMENTS(BsSection.NON_CURRENT_ASSETS, L("Inversiones financieras a largo plazo", "Long-term financial investments")),
     TRADE_RECEIVABLES(BsSection.CURRENT_ASSETS, L("Deudores comerciales y otras cuentas a cobrar", "Trade and other receivables")),
     CASH(BsSection.CURRENT_ASSETS, L("Efectivo y otros activos líquidos equivalentes", "Cash and cash equivalents")),
     CAPITAL(BsSection.EQUITY, L("Capital", "Share capital")),
@@ -37,6 +39,7 @@ enum class PygLine(val title: L) {
     PERSONNEL(L("Gastos de personal", "Personnel expenses")),
     OTHER_OPEX(L("Otros gastos de explotación", "Other operating expenses")),
     DEPRECIATION(L("Amortización del inmovilizado", "Depreciation")),
+    DISPOSALS(L("Deterioro y resultado por enajenaciones del inmovilizado", "Impairment and gains (losses) on disposal of fixed assets")),
     OTHER_RESULTS(L("Otros resultados", "Other results")),
     FINANCIAL_INCOME(L("Ingresos financieros", "Finance income")),
     FINANCIAL_EXPENSE(L("Gastos financieros", "Finance costs")),
@@ -76,15 +79,21 @@ object Pgc {
         bs("129", "Resultado del ejercicio", "Profit (loss) for the year", Nature.CREDIT, BsLine.YEAR_RESULT),
         bs("170", "Deudas a largo plazo con entidades de crédito", "Long-term bank loans", Nature.CREDIT, BsLine.LT_DEBT),
         // Grupo 2: Activo no corriente
+        bs("206", "Aplicaciones informáticas", "Computer software", Nature.DEBIT, BsLine.INTANGIBLE),
+        bs("2806", "Amortización acumulada de aplicaciones informáticas", "Accumulated amortisation of computer software", Nature.CREDIT, BsLine.INTANGIBLE),
         bs("211", "Construcciones", "Buildings", Nature.DEBIT, BsLine.PPE),
         bs("212", "Instalaciones técnicas", "Technical installations", Nature.DEBIT, BsLine.PPE),
         bs("213", "Maquinaria", "Machinery", Nature.DEBIT, BsLine.PPE),
+        bs("215", "Otras instalaciones", "Other installations", Nature.DEBIT, BsLine.PPE),
         bs("216", "Mobiliario", "Furniture", Nature.DEBIT, BsLine.PPE),
         bs("217", "Equipos para procesos de información", "IT equipment", Nature.DEBIT, BsLine.PPE),
         bs("218", "Elementos de transporte", "Vehicles", Nature.DEBIT, BsLine.PPE),
         bs("2812", "Amortización acumulada de instalaciones técnicas", "Accumulated depreciation of technical installations", Nature.CREDIT, BsLine.PPE),
         bs("2813", "Amortización acumulada de maquinaria", "Accumulated depreciation of machinery", Nature.CREDIT, BsLine.PPE),
+        bs("2815", "Amortización acumulada de otras instalaciones", "Accumulated depreciation of other installations", Nature.CREDIT, BsLine.PPE),
         bs("2816", "Amortización acumulada de mobiliario", "Accumulated depreciation of furniture", Nature.CREDIT, BsLine.PPE),
+        bs("2817", "Amortización acumulada de equipos para procesos de información", "Accumulated depreciation of IT equipment", Nature.CREDIT, BsLine.PPE),
+        bs("260", "Fianzas constituidas a largo plazo", "Long-term deposits given", Nature.DEBIT, BsLine.LT_INVESTMENTS),
         // Grupo 4: Acreedores y deudores por operaciones comerciales
         bs("400", "Proveedores", "Suppliers", Nature.CREDIT, BsLine.TRADE_PAYABLES),
         bs("410", "Acreedores por prestaciones de servicios", "Service creditors", Nature.CREDIT, BsLine.TRADE_PAYABLES),
@@ -118,9 +127,12 @@ object Pgc {
         pyg("631", "Otros tributos", "Other taxes", Nature.DEBIT, PygLine.OTHER_OPEX),
         pyg("640", "Sueldos y salarios", "Wages and salaries", Nature.DEBIT, PygLine.PERSONNEL),
         pyg("642", "Seguridad Social a cargo de la empresa", "Employer social security", Nature.DEBIT, PygLine.PERSONNEL),
+        pyg("649", "Otros gastos sociales", "Other employee benefits", Nature.DEBIT, PygLine.PERSONNEL),
         pyg("662", "Intereses de deudas", "Interest on debts", Nature.DEBIT, PygLine.FINANCIAL_EXPENSE),
         pyg("669", "Otros gastos financieros", "Other finance costs", Nature.DEBIT, PygLine.FINANCIAL_EXPENSE),
+        pyg("671", "Pérdidas procedentes del inmovilizado material", "Losses on disposal of property, plant and equipment", Nature.DEBIT, PygLine.DISPOSALS),
         pyg("678", "Gastos excepcionales", "Exceptional expenses", Nature.DEBIT, PygLine.OTHER_RESULTS),
+        pyg("680", "Amortización del inmovilizado intangible", "Amortisation of intangible assets", Nature.DEBIT, PygLine.DEPRECIATION),
         pyg("681", "Amortización del inmovilizado material", "Depreciation of property, plant and equipment", Nature.DEBIT, PygLine.DEPRECIATION),
         // Grupo 7: Ventas e ingresos
         pyg("700", "Ventas de mercaderías", "Sales of goods for resale", Nature.CREDIT, PygLine.REVENUE),

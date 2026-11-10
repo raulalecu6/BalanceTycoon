@@ -1,75 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Español. El contenido del juego (cuentas, documentos, asientos) viene del módulo core en los dos idiomas. -->
+<!-- Español. El contenido del juego (cuentas, consultas, asientos) viene del módulo core en los dos idiomas. -->
 <resources>
     <string name="app_name">Balance Tycoon</string>
-    <string name="default_company">Mi Empresa, S.L.</string>
+    <string name="default_company">Mi Gestoría, S.L.</string>
     <string name="loading">Abriendo los libros…</string>
 
-    <string name="tab_business">Negocio</string>
-    <string name="tab_inbox">Bandeja</string>
-    <string name="tab_books">Libros</string>
-    <string name="tab_tax">Hacienda</string>
+    <string name="tab_office">Oficina</string>
+    <string name="tab_staff">Plantilla</string>
+    <string name="tab_equipment">Equipos</string>
+    <string name="tab_clients">Clientes</string>
+    <string name="tab_accounts">Cuentas</string>
 
-    <string name="cash">Banco</string>
-    <string name="public_debt">Pendiente con Hacienda y SS</string>
     <string name="credit_line">Póliza dispuesta: %1$s</string>
     <string name="settings">Ajustes</string>
 
     <string name="buy_x1">×1</string>
     <string name="buy_x10">×10</string>
     <string name="buy_max">Máx.</string>
-    <string name="sales_per_min">Ventas por minuto</string>
-    <string name="multiplier">Multiplicador ×%1$s</string>
-    <string name="boost_title">Turbo de ventas ×2</string>
-    <string name="boost_watch">Ver anuncio (2 h)</string>
-    <string name="boost_active">Activo: quedan %1$s</string>
-    <string name="ad_simulated">Anuncio simulado: turbo activado.</string>
+    <string name="income_rate">Facturación</string>
+    <string name="open_short">Abrir</string>
+    <string name="no_staff_tap">Sin plantilla: toca la planta para tramitar</string>
+    <string name="staff_line">👥 %1$d/%2$d · 💻 %3$s</string>
+    <string name="next_floor_hint">Se abre al mudarte a: %1$s (%2$s)</string>
+    <string name="boost_watch">Ver anuncio (×2 durante 2 h)</string>
+    <string name="ad_simulated">Anuncio simulado: honorarios ×2 durante 2 horas.</string>
 
-    <string name="level">Nv. %1$d</string>
-    <string name="next_milestone">Próximo hito: nivel %1$d (ciclo ×2)</string>
-    <string name="vat_rate">IVA %1$s</string>
-    <string name="collect_cash">cobro al contado</string>
-    <string name="collect_credit">%1$s a %2$d días</string>
-    <string name="open_for">Abrir · %1$s + IVA</string>
-    <string name="sale_per_cycle">Venta por ciclo: %1$s + IVA %2$s</string>
-    <string name="cycle_time">Ciclo: %1$s s</string>
-    <string name="sell">Vender</string>
-    <string name="selling">Vendiendo…</string>
-    <string name="expand">Ampliar ×%1$d · %2$s + IVA</string>
-    <string name="expand_none">Sin saldo suficiente para ampliar</string>
-    <string name="hire">Contratar %1$s · %2$s/mes</string>
-    <string name="manager_working">%1$s vende sin parar</string>
-    <string name="fire">Despedir</string>
-    <string name="asset_line">Inmovilizado: %1$s (%2$s) · %3$s</string>
+    <string name="staff_title">Plantilla de la gestoría</string>
+    <string name="staff_payroll">Coste mensual (salarios + Seguridad Social)</string>
+    <string name="staff_summary">%1$d trabajadores · hasta %2$d puestos por planta en este local</string>
+    <string name="staff_note">Cada trabajador tramita expedientes sin parar: el primero automatiza el departamento y los siguientes multiplican su facturación. Las nóminas se contabilizan a final de mes (640, 642, 476, 4751 y 465).</string>
+    <string name="salary_month">%1$s brutos al mes</string>
+    <string name="workers_count">%1$d de %2$d puestos ocupados</string>
+    <string name="hire_btn">Contratar</string>
+    <string name="hire_price">%1$s/mes</string>
+    <string name="hire_pc">ordenador %1$s</string>
+    <string name="staff_full">Todos los puestos ocupados. Múdate a un local más grande para tener más.</string>
+    <string name="training_title">Formación</string>
+    <string name="training_effect">+%1$d %% de honorarios en este departamento</string>
+    <string name="training_need_staff">Contrata a alguien para poder formarle.</string>
+    <string name="training_max">Formación al máximo.</string>
+    <string name="training_locked">Consigue mejor reputación para acceder al siguiente curso.</string>
+    <string name="training_btn">Curso de nivel %1$d</string>
+    <string name="vat_exempt">exento de IVA</string>
 
-    <string name="inbox_streak">Racha de rigor: %1$d (+%2$s en ventas)</string>
-    <string name="inbox_best">Mejor racha: %1$d · Aciertos: %2$d de %3$d</string>
-    <string name="assistant_title">Auxiliar contable</string>
-    <string name="assistant_desc">Contabiliza los documentos automáticamente. Conserva la racha, pero no la aumenta. %1$s/mes.</string>
-    <string name="hire_short">Contratar</string>
-    <string name="inbox_empty">La bandeja está vacía. Llega un documento nuevo cada dos días.</string>
-    <string name="doc_received">Recibido el %1$s · la gestoría lo contabilizará en %2$d días</string>
-    <string name="doc_base">Base imponible</string>
-    <string name="doc_vat">IVA (%1$s)</string>
-    <string name="doc_vat_exempt">Exento de IVA</string>
-    <string name="doc_withholding">Retención de IRPF (%1$s)</string>
-    <string name="doc_total">Total a pagar</string>
-    <string name="doc_question">¿A qué cuenta va este gasto?</string>
-    <string name="feedback_correct">¡Correcto!</string>
-    <string name="feedback_wrong">No es esa</string>
-    <string name="feedback_account">Cuenta correcta: %1$s</string>
-    <string name="feedback_booked">El asiento se ha registrado en la cuenta correcta.</string>
+    <string name="software_title">Programa de gestión</string>
+    <string name="multiplier_all">Honorarios de todos los departamentos ×%1$s</string>
+    <string name="software_locked">Siguiente: %1$s (necesitas más reputación)</string>
+    <string name="software_note">Las licencias son aplicaciones informáticas (206) y se amortizan en tres años (680).</string>
+    <string name="equipment_current">%1$s · ×%2$s · %3$d puestos</string>
+    <string name="equipment_max">Ya tienes lo mejor del mercado.</string>
+    <string name="equipment_locked">Siguiente: %1$s (necesitas un local más grande)</string>
+    <string name="equipment_disposal">Los ordenadores actuales se dan de baja: pérdida de %1$s (671).</string>
+    <string name="equipment_note" formatted="false">Los ordenadores son equipos para procesos de información (217) y se amortizan en cuatro años, el 25 % anual. Al renovarlos, se cancela su amortización acumulada (2817) y lo que quede por amortizar es una pérdida.</string>
+
+    <string name="clients_now">Clientes: %1$s</string>
+    <string name="next_tier">Siguiente: %1$s</string>
+    <string name="max_tier">Tienes la máxima reputación.</string>
+    <string name="fee_multiplier">Honorarios ×%1$s por el tipo de cliente</string>
+    <string name="managed_wealth">Patrimonio de tus clientes</string>
+    <string name="client_count">%1$d clientes en cartera</string>
+    <string name="streak">Racha: %1$d (+%2$d %% de honorarios)</string>
+    <string name="cases_stats">%1$d de %2$d bien · %3$d resueltas por tu equipo · mejor racha %4$d</string>
+    <string name="cases_empty">No hay consultas pendientes. Llega una nueva cada dos días.</string>
+    <string name="tiers_title">Tipos de cliente</string>
+    <string name="tier_line">%1$d puntos de reputación · honorarios ×%2$s</string>
+    <string name="case_fee">honorarios %1$s</string>
+    <string name="case_auto">Si no respondes, tu equipo la resolverá en %1$d días a mitad de precio.</string>
+    <string name="case_ok">¡Bien resuelta!</string>
+    <string name="case_wrong">Respuesta incorrecta</string>
+    <string name="case_answer">Respuesta correcta: %1$s</string>
+    <string name="case_ok_detail">Facturas %1$s y ganas %2$d de reputación.</string>
+    <string name="case_wrong_detail">Rectificas sin cobrar y pierdes %1$d de reputación.</string>
     <string name="dismiss">Entendido</string>
+
+    <string name="offices_title">Locales</string>
+    <string name="office_specs">%1$d plantas · %2$d puestos por planta · alquiler %3$s/mes</string>
+    <string name="office_requires">Requiere clientes «%1$s» · obras %2$s + IVA · fianza %3$s</string>
+    <string name="office_withholding" formatted="false">El arrendador es una persona física: retienes el 19 % del alquiler (modelo 115).</string>
+    <string name="move_btn">Mudarse</string>
+    <string name="offices_note">Al mudarte recuperas la fianza (260), las obras del local anterior se dan de baja (671) y las nuevas se registran como otras instalaciones (215).</string>
+    <string name="fresh_title">¡Nueva versión!</string>
+    <string name="fresh_body">Ahora diriges una gestoría que atiende a clientes cada vez más importantes. La partida del prototipo anterior se ha guardado aparte y empiezas de cero.</string>
 
     <string name="books_journal">Diario</string>
     <string name="books_ledger">Mayor</string>
     <string name="books_pyg">PyG</string>
     <string name="books_balance">Balance</string>
+    <string name="books_tax">Impuestos</string>
     <string name="journal_entry">Nº %1$d · %2$s</string>
     <string name="debit">Debe</string>
     <string name="credit">Haber</string>
     <string name="balance_col">Saldo</string>
-    <string name="journal_note">Se muestran los últimos %1$d asientos. Las ventas se anotan en asientos resumen diarios (art. 28.2 del Código de Comercio).</string>
+    <string name="journal_note">Se muestran los últimos %1$d asientos. Los honorarios se anotan en asientos resumen diarios (art. 28.2 del Código de Comercio).</string>
     <string name="pyg_title">Cuenta de pérdidas y ganancias %1$d (ejercicio en curso)</string>
     <string name="pyg_operating">A) Resultado de explotación</string>
     <string name="pyg_financial">B) Resultado financiero</string>
@@ -83,7 +105,7 @@
     <string name="bs_balanced">✓ Cuadra: activo = patrimonio neto + pasivo</string>
     <string name="bs_unbalanced">✗ Descuadre</string>
     <string name="last_year">Ejercicio %1$d cerrado</string>
-    <string name="last_year_detail">Ventas %1$s · Resultado %2$s · IS %3$s</string>
+    <string name="last_year_detail">Honorarios %1$s · Resultado %2$s · IS %3$s</string>
 
     <string name="tax_vat_title">IVA del trimestre (estimación)</string>
     <string name="tax_vat_output">IVA repercutido (477)</string>
@@ -91,7 +113,7 @@
     <string name="tax_vat_prev">A compensar de trimestres anteriores (4700)</string>
     <string name="tax_vat_pay">A ingresar</string>
     <string name="tax_vat_credit">A compensar</string>
-    <string name="tax_vat_note">El IVA que cobras no es tuyo: resérvalo para el modelo 303.</string>
+    <string name="tax_vat_note">El IVA que cobras a tus clientes no es tuyo: resérvalo para el modelo 303.</string>
     <string name="tax_is_title">Impuesto sobre Sociedades (estimación %1$d)</string>
     <string name="tax_is_regime">Régimen: %1$s</string>
     <string name="tax_is_quota">Cuota estimada sobre el resultado actual: %1$s</string>
@@ -101,11 +123,10 @@
     <string name="days_left">en %1$d días</string>
     <string name="due_today">hoy</string>
     <string name="overdue">%1$d días de retraso</string>
-    <string name="pay_now">Pagar ya (sin comisión)</string>
+    <string name="pay_now">Pagar ya</string>
     <string name="pay_late">Pagar con recargo del %1$s</string>
-    <string name="gestoria_title">Gestoría externa</string>
-    <string name="gestoria_on">Presenta cada modelo el último día por 45 € + IVA. Si pagas antes, te ahorras la comisión.</string>
-    <string name="gestoria_off" formatted="false">Desactivada: los modelos que no pagues a tiempo llevan el recargo del art. 27 LGT (1% más un 1% por mes completo).</string>
+    <string name="gestoria_title">Tu departamento fiscal</string>
+    <string name="gestoria_on">Presenta los modelos 303, 111, 115, 123 y 200 de la propia gestoría el último día de plazo, sin recargos. Los seguros sociales y los dividendos se pagan por domiciliación.</string>
     <string name="distribution_title">Aplicación del resultado de %1$d</string>
     <string name="distribution_desc" formatted="false">La junta general debe decidir antes del 30 de junio. Primero se dota la reserva legal (10% del beneficio hasta llegar al 20% del capital, art. 274 LSC) y los dividendos no pueden dejar el patrimonio neto por debajo del capital (art. 273 LSC).</string>
     <string name="distribution_profit">Beneficio</string>
@@ -118,13 +139,14 @@
     <string name="owner_wealth">Tu patrimonio personal (dividendos netos): %1$s</string>
     <string name="history_title">Últimos pagos</string>
     <string name="paid_by_player">pagado por ti</string>
-    <string name="paid_by_gestoria">presentado por la gestoría</string>
+    <string name="paid_by_gestoria">presentado por tu departamento fiscal</string>
     <string name="paid_by_bank">domiciliado</string>
 
     <string name="offline_title">Mientras estabas fuera</string>
     <string name="offline_body">%1$s · %2$d días contables</string>
-    <string name="offline_sales">Ventas: %1$s</string>
+    <string name="offline_sales">Honorarios: %1$s</string>
     <string name="offline_cash">Variación del banco: %1$s</string>
+    <string name="offline_cases">Tu equipo ha resuelto %1$d consultas · +%2$d de reputación</string>
     <string name="offline_entries">Asientos registrados: %1$d</string>
     <string name="offline_capped">El progreso fuera del juego tiene un máximo de 8 horas.</string>
     <string name="continue_btn">Continuar</string>
@@ -132,11 +154,11 @@
     <string name="minutes">%1$d min</string>
 
     <string name="settings_company">Empresa</string>
-    <string name="settings_reset">Empezar una empresa nueva</string>
+    <string name="settings_reset">Empezar una gestoría nueva</string>
     <string name="settings_reset_confirm">Se borrará la partida actual. ¿Continuar?</string>
     <string name="cancel">Cancelar</string>
     <string name="confirm">Confirmar</string>
     <string name="close">Cerrar</string>
     <string name="about_title">Acerca de</string>
-    <string name="about_body">Prototipo 0.1 de Raúl Marian Alecu. La contabilidad sigue el PGC PYMES y la normativa fiscal de 2026 de forma simplificada. No constituye asesoramiento fiscal ni contable.</string>
+    <string name="about_body">Prototipo 0.2 de Raúl Marian Alecu. La contabilidad sigue el PGC PYMES y la normativa fiscal de 2026 de forma simplificada; los clientes son ficticios. No constituye asesoramiento fiscal ni contable. Fuente Pixelify Sans (SIL Open Font License 1.1).</string>
 </resources>

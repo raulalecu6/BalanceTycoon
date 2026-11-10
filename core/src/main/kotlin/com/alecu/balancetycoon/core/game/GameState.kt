@@ -3,28 +3,36 @@ package com.alecu.balancetycoon.core.game
 import com.alecu.balancetycoon.core.accounting.Ledger
 import com.alecu.balancetycoon.core.calendar.GameDate
 import com.alecu.balancetycoon.core.i18n.L
-import com.alecu.balancetycoon.core.money.Money
 import com.alecu.balancetycoon.core.tax.CorporateTaxRegime
 
-/** Estado variable de una línea de negocio. */
-class LineState(val id: String) {
+/** Estado variable de un departamento (una planta del edificio). */
+class DeptState(val id: String) {
+    /** Nivel de cartera: cuántos clientes atiende. 0 = departamento cerrado. */
     var level: Int = 0
-    var hasManager: Boolean = false
-    /** Ciclo manual en marcha (solo cuando no hay encargado). */
+    var workers: Int = 0
+    var training: Int = 0
+    var equipmentTier: Int = 0
+    /** Expediente manual en marcha (solo cuando no hay trabajadores). */
     var running: Boolean = false
-    /** Segundos transcurridos del ciclo actual. */
+    /** Segundos transcurridos del expediente actual. */
     var progress: Double = 0.0
-    /** Coste del inmovilizado de la línea y su amortización acumulada (grupo homogéneo). */
-    var grossCost: Long = 0
-    var accumulatedDepreciation: Long = 0
-    /** Ventas netas del día aún no contabilizadas (se anotan en un asiento resumen al cerrar el día). */
+    /** Coste y amortización acumulada de los ordenadores del departamento (217 y 2817). */
+    var equipmentGross: Long = 0
+    var equipmentDepreciation: Long = 0
+    /** Honorarios del día aún no contabilizados (se anotan en un asiento resumen al cerrar el día). */
     var todayRevenue: Long = 0
     var todayCycles: Long = 0
-    var managerDaysThisMonth: Int = 0
+    /** Suma de trabajadores por día del mes, para prorratear las nóminas de quien entra a mitad de mes. */
+    var workerDaysThisMonth: Long = 0
     var lifetimeRevenue: Long = 0
+    /** Expedientes terminados desde el inicio (para la animación de la torre). */
+    var completedCycles: Long = 0
+
+    /** Puestos con ordenador: al menos el de la persona que abre el departamento. */
+    val desks: Int get() = maxOf(1, workers)
 }
 
-/** Cobro (430) o pago (400) aplazado que vence en una fecha. */
+/** Cobro (430) o pago (400/410) aplazado que vence en una fecha. */
 class PendingFlow(val dueDay: Long, val account: String, val amount: Long)
 
 enum class ObligationKind { VAT, WITHHOLDINGS, SOCIAL_SECURITY, CORPORATE_TAX, DIVIDEND }
@@ -48,18 +56,18 @@ class Obligation(
     val isPaid: Boolean get() = paidDay != null
 }
 
-/** Documento pendiente de clasificar en la bandeja. */
-class PendingDocument(
+/** Consulta de un cliente pendiente de resolver. [order] es el orden barajado de las opciones. */
+class PendingCase(
     val id: Int,
     val templateId: String,
     val arrivalDay: Long,
-    val base: Long,
-    val options: List<String>,
+    /** Honorarios netos que se facturan si se resuelve bien. */
+    val fee: Long,
+    /** Tipo de cliente con el que llegó (fija la reputación que da). */
+    val tier: Int,
+    val order: List<Int>,
 ) {
-    val template: DocTemplate get() = Documents.get(templateId)
-    val vat: Long get() = Money.pct(base, template.vat)
-    val withholding: Long get() = Money.pct(base, template.withholding)
-    val total: Long get() = base + vat - withholding
+    val template: CaseTemplate get() = Cases.get(templateId)
 }
 
 /** Beneficio de un ejercicio cerrado pendiente de que la junta acuerde su aplicación. */
@@ -84,7 +92,7 @@ class GameEvent(val seq: Long, val day: Long, val text: L, val kind: EventKind)
 
 /** Estado completo de una partida. Todo lo que hay aquí se guarda en el archivo de partida. */
 class GameState(val startYear: Int) {
-    var companyName: String = "Mi Empresa, S.L."
+    var companyName: String = "Mi Gestoría, S.L."
 
     /** Fecha actual (día de época) y segundos transcurridos dentro del día. */
     var day: Long = GameDate.of(startYear, 1, 1).epochDay
@@ -93,24 +101,32 @@ class GameState(val startYear: Int) {
     var playSeconds: Double = 0.0
 
     val ledger: Ledger = Ledger(startYear)
-    val lines: LinkedHashMap<String, LineState> = LinkedHashMap()
+    val depts: LinkedHashMap<String, DeptState> = LinkedHashMap()
     val flows: MutableList<PendingFlow> = mutableListOf()
     val obligations: MutableList<Obligation> = mutableListOf()
     var nextObligationId: Int = 1
 
-    val documents: MutableList<PendingDocument> = mutableListOf()
-    var nextDocId: Int = 1
-    var nextDocDay: Long = day
-    var lastDocTemplate: String = ""
+    // Local, programa de gestión y reputación
+    var officeIndex: Int = 0
+    var fitOutGross: Long = 0
+    var fitOutDepreciation: Long = 0
+    var softwareTier: Int = 0
+    var softwareGross: Long = 0
+    var softwareDepreciation: Long = 0
+    var reputation: Long = 0
+    var bestTier: Int = 0
 
+    // Consultas de clientes
+    val cases: MutableList<PendingCase> = mutableListOf()
+    var nextCaseId: Int = 1
+    var nextCaseDay: Long = day
+    val recentCases: ArrayDeque<String> = ArrayDeque()
     var streak: Int = 0
     var bestStreak: Int = 0
-    var docsCorrect: Int = 0
-    var docsWrong: Int = 0
+    var casesCorrect: Int = 0
+    var casesWrong: Int = 0
+    var casesAuto: Int = 0
 
-    var hasAssistant: Boolean = false
-    var assistantDaysThisMonth: Int = 0
-    var gestoriaActive: Boolean = true
     var boostUntil: Double = 0.0
     var rngState: Long = 88172645463325252L
 

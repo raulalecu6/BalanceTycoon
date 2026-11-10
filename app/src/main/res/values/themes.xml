@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Tema de la ventana. Los colores de las pantallas se definen en Compose (ui/theme/Theme.kt). -->
-    <style name="Theme.BalanceTycoon" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/paper</item>
+    <style name="Theme.BalanceTycoon" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/panel_dark</item>
     </style>
 </resources>

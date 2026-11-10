@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.alecu.balancetycoon.GameViewModel
 import com.alecu.balancetycoon.R
 import com.alecu.balancetycoon.core.accounting.BsLine
 import com.alecu.balancetycoon.core.accounting.BsSection
@@ -47,13 +48,14 @@ private val AmountWidth = 96.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BooksScreen(engine: GameEngine, lang: Lang, tick: Long) {
+fun BooksScreen(vm: GameViewModel, engine: GameEngine, lang: Lang, tick: Long) {
     var sub by rememberSaveable { mutableIntStateOf(0) }
     val labels = listOf(
         stringResource(R.string.books_journal),
         stringResource(R.string.books_ledger),
         stringResource(R.string.books_pyg),
         stringResource(R.string.books_balance),
+        stringResource(R.string.books_tax),
     )
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -68,7 +70,8 @@ fun BooksScreen(engine: GameEngine, lang: Lang, tick: Long) {
             0 -> Journal(engine, lang)
             1 -> GeneralLedger(engine, lang)
             2 -> IncomeStatement(engine, lang)
-            else -> BalanceSheet(engine, lang)
+            3 -> BalanceSheet(engine, lang)
+            else -> TaxScreen(vm, engine, lang, tick)
         }
     }
 }
@@ -165,6 +168,7 @@ private fun IncomeStatement(engine: GameEngine, lang: Lang) {
                 AmountRow(PygLine.PERSONNEL.title.get(lang), p.personnel, lang, indent = 8.dp)
                 AmountRow(PygLine.OTHER_OPEX.title.get(lang), p.otherOpex, lang, indent = 8.dp)
                 AmountRow(PygLine.DEPRECIATION.title.get(lang), p.depreciation, lang, indent = 8.dp)
+                if (p.disposals != 0L) AmountRow(PygLine.DISPOSALS.title.get(lang), p.disposals, lang, indent = 8.dp)
                 if (p.otherResults != 0L) AmountRow(PygLine.OTHER_RESULTS.title.get(lang), p.otherResults, lang, indent = 8.dp)
                 AmountRow(stringResource(R.string.pyg_operating), p.operatingResult, lang, bold = true, colored = true)
                 HorizontalDivider()

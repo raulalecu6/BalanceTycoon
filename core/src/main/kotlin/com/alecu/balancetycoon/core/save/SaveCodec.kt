@@ -3,27 +3,32 @@ package com.alecu.balancetycoon.core.save
 import com.alecu.balancetycoon.core.accounting.EntryLine
 import com.alecu.balancetycoon.core.accounting.JournalEntry
 import com.alecu.balancetycoon.core.calendar.GameDate
+import com.alecu.balancetycoon.core.game.Cases
+import com.alecu.balancetycoon.core.game.DeptState
+import com.alecu.balancetycoon.core.game.Departments
 import com.alecu.balancetycoon.core.game.EventKind
 import com.alecu.balancetycoon.core.game.GameEvent
 import com.alecu.balancetycoon.core.game.GameState
-import com.alecu.balancetycoon.core.game.LineState
-import com.alecu.balancetycoon.core.game.Lines
 import com.alecu.balancetycoon.core.game.Obligation
 import com.alecu.balancetycoon.core.game.ObligationKind
 import com.alecu.balancetycoon.core.game.PaidBy
+import com.alecu.balancetycoon.core.game.PendingCase
 import com.alecu.balancetycoon.core.game.PendingDistribution
-import com.alecu.balancetycoon.core.game.PendingDocument
 import com.alecu.balancetycoon.core.game.PendingFlow
 import com.alecu.balancetycoon.core.game.YearSummary
 import com.alecu.balancetycoon.core.i18n.L
 import com.alecu.balancetycoon.core.tax.CorporateTaxRegime
 
+/** La partida guardada es de una versión anterior incompatible (el prototipo 0.1 de las tiendas). */
+class IncompatibleSaveException(message: String) : Exception(message)
+
 /**
  * Convierte la partida en JSON y viceversa. El campo "v" es la versión del formato:
  * si en el futuro cambia, aquí se migrarán las partidas antiguas.
+ * La versión 1 era el prototipo de tiendas y no se puede convertir en una gestoría.
  */
 object SaveCodec {
-    const val FORMAT_VERSION = 1L
+    const val FORMAT_VERSION = 2L
 
     fun encode(s: GameState): String {
         val led = s.ledger
@@ -47,12 +52,13 @@ object SaveCodec {
                 )
             },
         )
-        m["lines"] = s.lines.values.map { l ->
+        m["depts"] = s.depts.values.map { d ->
             mapOf(
-                "id" to l.id, "level" to l.level.toLong(), "manager" to l.hasManager, "running" to l.running,
-                "progress" to l.progress, "gross" to l.grossCost, "dep" to l.accumulatedDepreciation,
-                "todayRev" to l.todayRevenue, "todayCycles" to l.todayCycles,
-                "mgrDays" to l.managerDaysThisMonth.toLong(), "lifetime" to l.lifetimeRevenue,
+                "id" to d.id, "level" to d.level.toLong(), "workers" to d.workers.toLong(), "training" to d.training.toLong(),
+                "equip" to d.equipmentTier.toLong(), "running" to d.running, "progress" to d.progress,
+                "eqGross" to d.equipmentGross, "eqDep" to d.equipmentDepreciation,
+                "todayRev" to d.todayRevenue, "todayCycles" to d.todayCycles,
+                "workerDays" to d.workerDaysThisMonth, "lifetime" to d.lifetimeRevenue, "cycles" to d.completedCycles,
             )
         }
         m["flows"] = s.flows.map { listOf(it.dueDay, it.account, it.amount) }
@@ -64,19 +70,20 @@ object SaveCodec {
             )
         }
         m["nextObligationId"] = s.nextObligationId.toLong()
-        m["documents"] = s.documents.map { d ->
-            mapOf("id" to d.id.toLong(), "t" to d.templateId, "day" to d.arrivalDay, "base" to d.base, "opts" to d.options)
+        m["office"] = s.officeIndex.toLong()
+        m["fitOut"] = listOf(s.fitOutGross, s.fitOutDepreciation)
+        m["software"] = listOf(s.softwareTier.toLong(), s.softwareGross, s.softwareDepreciation)
+        m["reputation"] = s.reputation
+        m["bestTier"] = s.bestTier.toLong()
+        m["cases"] = s.cases.map { c ->
+            mapOf("id" to c.id.toLong(), "t" to c.templateId, "day" to c.arrivalDay, "fee" to c.fee, "tier" to c.tier.toLong(), "order" to c.order.map { it.toLong() })
         }
-        m["nextDocId"] = s.nextDocId.toLong()
-        m["nextDocDay"] = s.nextDocDay
-        m["lastDocTemplate"] = s.lastDocTemplate
+        m["nextCaseId"] = s.nextCaseId.toLong()
+        m["nextCaseDay"] = s.nextCaseDay
+        m["recentCases"] = s.recentCases.toList()
         m["streak"] = s.streak.toLong()
         m["bestStreak"] = s.bestStreak.toLong()
-        m["docsCorrect"] = s.docsCorrect.toLong()
-        m["docsWrong"] = s.docsWrong.toLong()
-        m["assistant"] = s.hasAssistant
-        m["assistantDays"] = s.assistantDaysThisMonth.toLong()
-        m["gestoria"] = s.gestoriaActive
+        m["casesStats"] = listOf(s.casesCorrect.toLong(), s.casesWrong.toLong(), s.casesAuto.toLong())
         m["boostUntil"] = s.boostUntil
         m["rng"] = s.rngState
         m["prevIncn"] = s.prevYearIncn
@@ -108,6 +115,7 @@ object SaveCodec {
         val m = Json.parse(text) as Map<String, Any?>
         val version = m.long("v")
         require(version <= FORMAT_VERSION) { "La partida es de una versión más nueva del juego ($version)" }
+        if (version < 2) throw IncompatibleSaveException("Partida del prototipo de tiendas (versión $version)")
 
         val s = GameState(m.int("startYear"))
         s.companyName = m["company"] as String
@@ -131,21 +139,24 @@ object SaveCodec {
             s.ledger.restoreEntry(JournalEntry(em.int("n"), em.int("y"), GameDate(em.long("d")), L(em["es"] as String, em["en"] as String), lines))
         }
 
-        // Se crean todas las líneas del catálogo (por si una versión nueva añade alguna) y se rellenan las guardadas.
-        for (def in Lines.all) s.lines[def.id] = LineState(def.id)
-        for (x in m["lines"] as List<Any?>) {
-            val lm = x as Map<String, Any?>
-            val ls = s.lines[lm["id"] as String] ?: continue
-            ls.level = lm.int("level")
-            ls.hasManager = lm["manager"] as Boolean
-            ls.running = lm["running"] as Boolean
-            ls.progress = lm.double("progress")
-            ls.grossCost = lm.long("gross")
-            ls.accumulatedDepreciation = lm.long("dep")
-            ls.todayRevenue = lm.long("todayRev")
-            ls.todayCycles = lm.long("todayCycles")
-            ls.managerDaysThisMonth = lm.int("mgrDays")
-            ls.lifetimeRevenue = lm.long("lifetime")
+        // Se crean todos los departamentos del catálogo (por si una versión nueva añade alguno) y se rellenan los guardados.
+        for (def in Departments.all) s.depts[def.id] = DeptState(def.id)
+        for (x in m["depts"] as List<Any?>) {
+            val dm = x as Map<String, Any?>
+            val d = s.depts[dm["id"] as String] ?: continue
+            d.level = dm.int("level")
+            d.workers = dm.int("workers")
+            d.training = dm.int("training")
+            d.equipmentTier = dm.int("equip")
+            d.running = dm["running"] as Boolean
+            d.progress = dm.double("progress")
+            d.equipmentGross = dm.long("eqGross")
+            d.equipmentDepreciation = dm.long("eqDep")
+            d.todayRevenue = dm.long("todayRev")
+            d.todayCycles = dm.long("todayCycles")
+            d.workerDaysThisMonth = dm.long("workerDays")
+            d.lifetimeRevenue = dm.long("lifetime")
+            d.completedCycles = dm.long("cycles")
         }
         for (x in m["flows"] as List<Any?>) {
             val f = x as List<Any?>
@@ -164,20 +175,31 @@ object SaveCodec {
             s.obligations.add(o)
         }
         s.nextObligationId = m.int("nextObligationId")
-        for (x in m["documents"] as List<Any?>) {
-            val dm = x as Map<String, Any?>
-            s.documents.add(PendingDocument(dm.int("id"), dm["t"] as String, dm.long("day"), dm.long("base"), (dm["opts"] as List<Any?>).map { it as String }))
+        s.officeIndex = m.int("office")
+        val fit = m["fitOut"] as List<Any?>
+        s.fitOutGross = (fit[0] as Number).toLong()
+        s.fitOutDepreciation = (fit[1] as Number).toLong()
+        val sw = m["software"] as List<Any?>
+        s.softwareTier = (sw[0] as Number).toInt()
+        s.softwareGross = (sw[1] as Number).toLong()
+        s.softwareDepreciation = (sw[2] as Number).toLong()
+        s.reputation = m.long("reputation")
+        s.bestTier = m.int("bestTier")
+        for (x in m["cases"] as List<Any?>) {
+            val cm = x as Map<String, Any?>
+            val id = cm["t"] as String
+            if (Cases.find(id) == null) continue // consulta retirada en una versión nueva
+            s.cases.add(PendingCase(cm.int("id"), id, cm.long("day"), cm.long("fee"), cm.int("tier"), (cm["order"] as List<Any?>).map { (it as Number).toInt() }))
         }
-        s.nextDocId = m.int("nextDocId")
-        s.nextDocDay = m.long("nextDocDay")
-        s.lastDocTemplate = m["lastDocTemplate"] as String
+        s.nextCaseId = m.int("nextCaseId")
+        s.nextCaseDay = m.long("nextCaseDay")
+        for (x in m["recentCases"] as List<Any?>) s.recentCases.addLast(x as String)
         s.streak = m.int("streak")
         s.bestStreak = m.int("bestStreak")
-        s.docsCorrect = m.int("docsCorrect")
-        s.docsWrong = m.int("docsWrong")
-        s.hasAssistant = m["assistant"] as Boolean
-        s.assistantDaysThisMonth = m.int("assistantDays")
-        s.gestoriaActive = m["gestoria"] as Boolean
+        val cs = m["casesStats"] as List<Any?>
+        s.casesCorrect = (cs[0] as Number).toInt()
+        s.casesWrong = (cs[1] as Number).toInt()
+        s.casesAuto = (cs[2] as Number).toInt()
         s.boostUntil = m.double("boostUntil")
         s.rngState = m.long("rng")
         s.prevYearIncn = m.long("prevIncn")

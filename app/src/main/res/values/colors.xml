@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ink">#FF1F2937</color>
-    <color name="gold">#FFD9A441</color>
-    <color name="paper">#FFF6F3EC</color>
-    <color name="ic_launcher_background">#FF1F2937</color>
+    <color name="panel_dark">#FF12292E</color>
+    <color name="mint">#FF8EE3B5</color>
+    <color name="gold">#FFF4C542</color>
+    <color name="ic_launcher_background">#FF12292E</color>
 </resources>

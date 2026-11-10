@@ -12,7 +12,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -106,11 +105,8 @@ fun TaxScreen(vm: GameViewModel, engine: GameEngine, lang: Lang, tick: Long) {
 
         item(key = "gestoria") {
             SectionCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.gestoria_title), Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                    Switch(checked = s.gestoriaActive, onCheckedChange = { vm.setGestoria(it) })
-                }
-                Hint(stringResource(if (s.gestoriaActive) R.string.gestoria_on else R.string.gestoria_off))
+                Text(stringResource(R.string.gestoria_title), fontWeight = FontWeight.SemiBold)
+                Hint(stringResource(R.string.gestoria_on))
             }
         }
 
@@ -166,7 +162,7 @@ private fun ObligationRow(o: Obligation, engine: GameEngine, lang: Lang, onPay: 
             color = if (days < 0) Amounts.negative else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (o.kind != ObligationKind.DIVIDEND) {
-            val late = days < 0 && !engine.state.gestoriaActive
+            val late = days < 0
             val canPay = engine.cash() >= o.amount
             FilledTonalButton(onClick = onPay, enabled = canPay, modifier = Modifier.fillMaxWidth()) {
                 Text(

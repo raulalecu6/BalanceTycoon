@@ -3,14 +3,15 @@ package com.alecu.balancetycoon
 import android.app.Application
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.alecu.balancetycoon.core.game.DocResult
+import com.alecu.balancetycoon.core.game.AutoPlayer
+import com.alecu.balancetycoon.core.game.CaseResult
 import com.alecu.balancetycoon.core.game.GameEngine
 import com.alecu.balancetycoon.core.game.OfflineReport
-import com.alecu.balancetycoon.core.i18n.L
 import com.alecu.balancetycoon.core.save.SaveCodec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,9 +29,6 @@ import kotlin.math.max
 import kotlin.math.min
 
 enum class BuyMode { ONE, TEN, MAX }
-
-/** Resultado del último documento clasificado, para mostrar la explicación. */
-data class DocFeedback(val title: L, val result: DocResult)
 
 /**
  * Hace avanzar el motor unas diez veces por segundo mientras la app está visible,
@@ -52,28 +50,35 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     var offlineReport: OfflineReport? by mutableStateOf(null)
     var catchingUp: Boolean by mutableStateOf(false)
         private set
-    var lastDocFeedback: DocFeedback? by mutableStateOf(null)
+    var lastCase: CaseResult? by mutableStateOf(null)
     var buyMode: BuyMode by mutableStateOf(BuyMode.ONE)
     var message: String? by mutableStateOf(null)
+    var tab: Int by mutableIntStateOf(0)
+    /** La partida guardada era del prototipo anterior y se ha empezado una nueva. */
+    var startedFresh: Boolean by mutableStateOf(false)
 
     val ads: AdsProvider = SimulatedAdsProvider()
 
     private var loopJob: Job? = null
     private var backgroundAtMillis = 0L
     private var loaded = false
+    private var pendingDemoMinutes = 0
 
     init {
         viewModelScope.launch { initialLoad() }
     }
 
     private suspend fun initialLoad() {
-        val saved = withContext(Dispatchers.IO) { store.load() }
+        val result = withContext(Dispatchers.IO) { store.load() }
+        val saved = result.state
+        startedFresh = result.discardedOldVersion
         val e = if (saved != null) GameEngine(saved) else newEngine()
         engine = e
         if (saved != null && saved.lastSavedMillis > 0) {
             catchUp(e, (System.currentTimeMillis() - saved.lastSavedMillis) / 1000.0)
         }
         loaded = true
+        if (pendingDemoMinutes > 0) runDemo(pendingDemoMinutes)
         save()
         startLoop()
     }
@@ -150,16 +155,48 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _tick.value = _tick.value + 1
     }
 
-    // ───────────── Acciones ─────────────
+    // ───────────── Modo demostración (solo en la versión de pruebas) ─────────────
 
-    fun tap(id: String) {
-        engine?.tapLine(id)
+    /** Prepara una partida avanzada con el jugador automático, para revisar la interfaz y hacer capturas. */
+    fun requestDemo(minutes: Int) {
+        if (minutes <= 0) return
+        if (loaded) viewModelScope.launch { runDemo(minutes) } else pendingDemoMinutes = minutes
+    }
+
+    private suspend fun runDemo(minutes: Int) {
+        pendingDemoMinutes = 0
+        catchingUp = true
+        val e = GameEngine.newGame(LocalDate.now().year, seed = 2026L, companyName = getApplication<Application>().getString(R.string.default_company))
+        val bot = AutoPlayer(e, accuracy = 0.85)
+        var t = 0.0
+        var steps = 0
+        while (t < minutes * 60.0) {
+            bot.act()
+            e.advance(0.5)
+            t += 0.5
+            if (++steps % 400 == 0) yield()
+        }
+        // Deja un par de consultas sin responder para que se vean en la pantalla de clientes.
+        e.advance(GameEngine.DAY_SECONDS * 4)
+        engine = e
+        offlineReport = null
+        lastCase = null
+        catchingUp = false
+        save()
         bump()
     }
 
-    /** Niveles que compraría ahora el botón «Ampliar» según el modo elegido. */
+    // ───────────── Acciones ─────────────
+
+    fun tap(id: String) {
+        engine?.tapDept(id)
+        bump()
+    }
+
+    /** Niveles que compraría ahora el botón de ampliar según el modo elegido. */
     fun buyCount(id: String): Int {
         val e = engine ?: return 1
+        if (e.dept(id).level == 0) return 1
         return when (buyMode) {
             BuyMode.ONE -> 1
             BuyMode.TEN -> 10
@@ -173,37 +210,34 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         bump()
     }
 
-    fun open(id: String) {
-        engine?.buyLevels(id, 1)
-        bump()
-    }
-
     fun hire(id: String) {
-        engine?.hireManager(id)
+        engine?.hire(id)
         bump()
     }
 
-    fun fire(id: String) {
-        engine?.fireManager(id)
+    fun train(id: String) {
+        engine?.train(id)
         bump()
     }
 
-    fun hireAssistant() {
-        engine?.hireAssistant()
+    fun upgradeEquipment(id: String) {
+        engine?.upgradeEquipment(id)
         bump()
     }
 
-    fun fireAssistant() {
-        engine?.fireAssistant()
+    fun buySoftware() {
+        engine?.buySoftware()
         bump()
     }
 
-    fun answer(docId: Int, account: String) {
+    fun moveOffice() {
+        engine?.moveOffice()
+        bump()
+    }
+
+    fun answer(caseId: Int, option: Int) {
         val e = engine ?: return
-        val doc = e.state.documents.firstOrNull { it.id == docId } ?: return
-        val title = doc.template.title
-        val result = e.answerDocument(docId, account) ?: return
-        lastDocFeedback = DocFeedback(title, result)
+        lastCase = e.answerCase(caseId, option)
         bump()
     }
 
@@ -214,11 +248,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun distribute(dividendShare: Double) {
         engine?.decideDistribution(dividendShare)
-        bump()
-    }
-
-    fun setGestoria(active: Boolean) {
-        engine?.setGestoria(active)
         bump()
     }
 
@@ -236,7 +265,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun resetGame() {
         engine = newEngine()
         offlineReport = null
-        lastDocFeedback = null
+        lastCase = null
         save()
         bump()
     }

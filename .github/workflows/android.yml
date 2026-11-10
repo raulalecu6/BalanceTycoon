@@ -1,6 +1,7 @@
 # Compila el juego en los servidores de GitHub cada vez que se sube un cambio a main:
 # ejecuta los tests del motor, genera el APK de prueba y lo publica en la release «ultima-version»,
-# desde donde se puede descargar e instalar directamente en el móvil.
+# desde donde se puede descargar e instalar directamente en el móvil. Después lo prueba en un
+# emulador y publica capturas de pantalla en la release «capturas».
 name: Compilar APK
 
 on:
@@ -53,4 +54,52 @@ jobs:
           gh release create ultima-version BalanceTycoon-debug.apk \
             --title "Última versión de prueba" \
             --notes "APK de prueba generado automáticamente a partir del commit ${GITHUB_SHA::7}. Descárgalo desde el móvil e instálalo; las versiones siguientes se instalan encima sin perder la partida." \
+            --prerelease
+
+  capturas:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v5
+
+      - name: Descargar el APK
+        uses: actions/download-artifact@v4
+        with:
+          name: BalanceTycoon-debug
+          path: apk
+
+      - name: Activar la aceleración del emulador (KVM)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Probar en un emulador y sacar capturas
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/capturas.sh
+
+      - name: Guardar las capturas como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas
+          path: capturas/
+
+      - name: Publicar las capturas en la release «capturas»
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete capturas --yes --cleanup-tag || true
+          gh release create capturas capturas/* \
+            --title "Capturas automáticas" \
+            --notes "Capturas del emulador generadas automáticamente a partir del commit ${GITHUB_SHA::7}." \
             --prerelease

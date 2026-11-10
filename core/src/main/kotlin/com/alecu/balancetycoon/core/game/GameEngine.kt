@@ -16,9 +16,16 @@ import com.alecu.balancetycoon.core.tax.Withholding
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 
-/** Resultado de clasificar un documento de la bandeja. */
-data class DocResult(val correct: Boolean, val correctAccount: String, val explanation: L, val streak: Int)
+/** Resultado de responder una consulta de un cliente. */
+data class CaseResult(
+    val correct: Boolean,
+    val template: CaseTemplate,
+    val fee: Long,
+    val reputationChange: Long,
+    val streak: Int,
+)
 
 /** Propuesta de aplicación del resultado según la LSC. */
 data class DistributionPreview(
@@ -38,13 +45,16 @@ data class OfflineReport(
     val sales: Long,
     val cashChange: Long,
     val entries: Long,
+    val reputation: Long,
+    val casesSolved: Int,
     val events: List<GameEvent>,
 )
 
 enum class PayResult { OK, NOT_FOUND, ALREADY_PAID }
 
 /**
- * Motor del juego. Hace avanzar el tiempo, produce las ventas y genera todos los asientos.
+ * Motor del juego: una gestoría que crece de un bajo comercial en Tomelloso a una torre en Madrid.
+ * Hace avanzar el tiempo, factura los honorarios y genera todos los asientos.
  * No conoce Android: la app solo llama a [advance] y a las acciones del jugador.
  */
 class GameEngine(val state: GameState) {
@@ -54,22 +64,24 @@ class GameEngine(val state: GameState) {
         /** Un día contable dura 30 segundos reales: un mes, 15 minutos; un ejercicio, unas 3 horas. */
         const val DAY_SECONDS = 30.0
         const val OFFLINE_CAP_SECONDS = 8 * 3600.0
-        const val DOC_INTERVAL_DAYS = 2L
-        const val DOC_AUTO_DAYS = 10L
-        const val MAX_DOCS = 12
+        const val CASE_INTERVAL_DAYS = 2L
+        const val CASE_AUTO_DAYS = 10L
+        const val MAX_CASES = 6
         const val STREAK_STEP = 0.02
         const val STREAK_CAP = 10
         const val BOOST_SECONDS = 2 * 3600.0
         const val CREDIT_RATE_BP = 700
-        const val LATE_AUTO_DAYS = 30L
         const val DIVIDEND_PAYMENT_DAYS = 30L
         const val MAX_EVENTS = 80
-        val GESTORIA_FILING_FEE: Long = Money.euros(45L)
-        val GESTORIA_DOC_FEE: Long = Money.euros(15L)
+        /** Segundos de facturación que vale, como referencia, una consulta bien resuelta. */
+        const val CASE_FEE_SECONDS = 90.0
+        const val REP_WRONG = 3L
+        const val REP_AUTO = 1L
+        const val REP_MILESTONE = 10L
         val INITIAL_CAPITAL: Long = Money.euros(3_000L)
 
-        /** Crea una partida nueva: constitución de la sociedad, primer horno y factura de la notaría. */
-        fun newGame(startYear: Int, seed: Long = 88172645463325252L, companyName: String = "Mi Empresa, S.L."): GameEngine {
+        /** Crea una partida nueva: constitución de la sociedad, fianza del local y apertura del departamento fiscal. */
+        fun newGame(startYear: Int, seed: Long = 88172645463325252L, companyName: String = "Mi Gestoría, S.L."): GameEngine {
             val s = GameState(startYear)
             s.companyName = companyName
             s.rngState = if (seed == 0L) 88172645463325252L else seed
@@ -80,16 +92,20 @@ class GameEngine(val state: GameState) {
     }
 
     private fun setupNewCompany() {
-        for (def in Lines.all) state.lines[def.id] = LineState(def.id)
+        for (def in Departments.all) state.depts[def.id] = DeptState(def.id)
         post(
             L("Constitución de la sociedad: aportación dineraria de los socios", "Incorporation: cash contribution from the partners"),
             EntryBuilder().debit("572", INITIAL_CAPITAL).credit("100", INITIAL_CAPITAL),
         )
-        buyLevels("bakery", 1)
-        addDocument(Documents.notary)
-        state.nextDocDay = state.day + DOC_INTERVAL_DAYS
+        val office = office()
+        post(
+            L("Fianza del local · ${office.name.es} (${office.city})", "Rent deposit · ${office.name.en} (${office.city})"),
+            EntryBuilder().debit("260", office.deposit).credit("572", office.deposit),
+        )
+        buyLevels("fiscal", 1)
+        state.nextCaseDay = state.day + 1
         event(
-            L("Se ha constituido ${state.companyName} con un capital de 3.000 €.", "${state.companyName} has been incorporated with €3,000 of share capital."),
+            L("Se ha constituido ${state.companyName}. Abres la gestoría en un bajo de Tomelloso.", "${state.companyName} has been incorporated. You open the practice in a small office in Tomelloso."),
             EventKind.GOOD,
         )
     }
@@ -99,57 +115,73 @@ class GameEngine(val state: GameState) {
     fun date(): GameDate = GameDate(state.day)
     fun cash(): Long = ledger.natural("572")
     fun creditDrawn(): Long = ledger.natural("5201")
-    fun line(id: String): LineState = state.lines.getValue(id)
+    fun dept(id: String): DeptState = state.depts.getValue(id)
     fun dayProgress(): Double = state.secondsIntoDay / DAY_SECONDS
+    fun office(): OfficeDef = Offices.get(state.officeIndex)
+    fun tier(): ClientTier = ClientTiers.forReputation(state.reputation)
+    fun nextTier(): ClientTier? = ClientTiers.all.getOrNull(tier().index + 1)
 
     fun boostActive(): Boolean = state.boostUntil > state.playSeconds
     fun boostRemainingSeconds(): Double = max(0.0, state.boostUntil - state.playSeconds)
 
-    /** Multiplicador de ventas: racha de rigor contable (+2 % por acierto, máx. +20 %) y turbo ×2. */
-    fun salesMultiplier(): Double {
+    /** El local tiene planta para este departamento. */
+    fun deptAvailable(id: String): Boolean = Departments.indexOf(id) < office().floors
+    fun deptOpen(id: String): Boolean = dept(id).level > 0
+
+    /** Racha de consultas bien resueltas (+2 % por acierto, máx. +20 %) y turbo ×2. */
+    fun globalMultiplier(): Double {
         val streakBonus = 1.0 + min(state.streak, STREAK_CAP) * STREAK_STEP
         val boost = if (boostActive()) 2.0 else 1.0
-        return streakBonus * boost
+        return streakBonus * boost * SoftwareTiers.get(state.softwareTier).multiplier * tier().feeMultiplier
+    }
+
+    /** Multiplicador propio del departamento: trabajadores, equipos y formación. */
+    fun deptMultiplier(id: String): Double {
+        val d = dept(id)
+        return max(1, d.workers) * EquipmentTiers.get(d.equipmentTier).multiplier * Departments.trainingMultiplier(d.training)
     }
 
     fun cycleSeconds(id: String): Double {
-        val def = Lines.get(id)
-        val ms = Lines.milestonesReached(line(id).level)
+        val def = Departments.get(id)
+        val ms = Departments.milestonesReached(dept(id).level)
         return def.cycleSeconds / (1 shl ms)
     }
 
-    /** Venta neta por ciclo con los multiplicadores actuales. */
+    /** Honorarios netos por expediente con los multiplicadores actuales. */
     fun revenuePerCycle(id: String): Long {
-        val def = Lines.get(id)
-        val ls = line(id)
-        return Money.times(def.revenuePerCycle * ls.level, salesMultiplier())
+        val def = Departments.get(id)
+        val d = dept(id)
+        return Money.times(def.feePerCycle * d.level, deptMultiplier(id) * globalMultiplier())
     }
 
+    /** Facturación por segundo del departamento si estuviera trabajando sin parar (céntimos). */
     fun revenuePerSecond(id: String): Double {
-        val ls = line(id)
-        if (ls.level == 0) return 0.0
+        if (dept(id).level == 0) return 0.0
         return revenuePerCycle(id) / cycleSeconds(id)
     }
 
-    /** Coste sin IVA de comprar [count] niveles. */
-    fun upgradeCost(id: String, count: Int): Long = Lines.costOf(Lines.get(id), line(id).level, count)
+    /** Facturación automática por segundo: solo los departamentos con trabajadores. */
+    fun incomePerSecond(): Double = Departments.all.filter { dept(it.id).workers > 0 }.sumOf { revenuePerSecond(it.id) }
 
-    /** Dinero necesario en el banco (coste más IVA soportado del 21 %). */
+    /** Coste sin IVA de comprar [count] niveles de cartera. */
+    fun upgradeCost(id: String, count: Int): Long = Departments.costOf(Departments.get(id), dept(id).level, count)
+
+    /** Dinero necesario en el banco (coste más IVA soportado del 21 %, y el primer ordenador si se abre). */
     fun upgradeCashNeeded(id: String, count: Int): Long {
         val cost = upgradeCost(id, count)
-        return cost + Money.pct(cost, Vat.GENERAL)
+        val pc = if (dept(id).level == 0) EquipmentTiers.get(0).price else 0L
+        return withVat(cost + pc)
     }
 
     /** Número máximo de niveles que se pueden pagar ahora con el saldo del banco (tope 1.000). */
     fun maxAffordable(id: String): Int {
-        val def = Lines.get(id)
-        var level = line(id).level
-        var spent = 0L
+        val def = Departments.get(id)
+        var level = dept(id).level
+        var spent = if (level == 0) withVat(EquipmentTiers.get(0).price) else 0L
         var count = 0
         val available = cash()
         while (count < 1000) {
-            val c = Lines.nextLevelCost(def, level)
-            val withVat = c + Money.pct(c, Vat.GENERAL)
+            val withVat = withVat(Departments.nextLevelCost(def, level))
             if (spent + withVat > available) break
             spent += withVat
             level++
@@ -158,13 +190,100 @@ class GameEngine(val state: GameState) {
         return count
     }
 
+    fun maxWorkers(): Int = office().desksPerFloor
+
+    /** Dinero necesario para contratar: el ordenador del nuevo puesto (el primero aprovecha el que ya hay). */
+    fun hireCashNeeded(id: String): Long {
+        val d = dept(id)
+        return if (d.workers == 0) 0L else withVat(EquipmentTiers.get(d.equipmentTier).price)
+    }
+
+    fun canHire(id: String): Boolean {
+        val d = dept(id)
+        return d.level > 0 && d.workers < maxWorkers() && cash() >= hireCashNeeded(id)
+    }
+
+    /** Coste mensual de un trabajador más (salario bruto más cuota patronal). */
+    fun workerMonthlyCost(id: String): Long {
+        val salary = Departments.get(id).salary
+        return salary + Money.pct(salary, SocialSecurity.EMPLOYER)
+    }
+
+    fun maxTraining(): Int = min(Departments.MAX_TRAINING, tier().index + 1)
+
+    /** Coste del siguiente nivel de formación para todo el departamento (exento de IVA). */
+    fun trainingCost(id: String): Long {
+        val d = dept(id)
+        val def = Departments.get(id)
+        return Money.times(def.trainingBase * d.desks, 3.0.pow(d.training))
+    }
+
+    fun canTrain(id: String): Boolean {
+        val d = dept(id)
+        return d.workers > 0 && d.training < maxTraining() && cash() >= trainingCost(id)
+    }
+
+    fun maxEquipmentTier(): Int = min(EquipmentTiers.all.size - 1, state.officeIndex + 1)
+
+    /** Coste sin IVA de renovar todos los ordenadores del departamento al nivel siguiente. */
+    fun equipmentUpgradeCost(id: String): Long {
+        val d = dept(id)
+        val next = EquipmentTiers.all.getOrNull(d.equipmentTier + 1) ?: return 0L
+        return next.price * d.desks
+    }
+
+    fun canUpgradeEquipment(id: String): Boolean {
+        val d = dept(id)
+        return d.level > 0 && d.equipmentTier < maxEquipmentTier() && cash() >= withVat(equipmentUpgradeCost(id))
+    }
+
+    /** Valor neto contable de los ordenadores que se darían de baja al renovarlos. */
+    fun equipmentBookValue(id: String): Long {
+        val d = dept(id)
+        return max(0L, d.equipmentGross - d.equipmentDepreciation)
+    }
+
+    fun nextSoftware(): SoftwareTier? = SoftwareTiers.all.getOrNull(state.softwareTier + 1)
+
+    fun canBuySoftware(): Boolean {
+        val next = nextSoftware() ?: return false
+        return tier().index >= next.minTier && cash() >= withVat(next.price)
+    }
+
+    fun nextOffice(): OfficeDef? = Offices.all.getOrNull(state.officeIndex + 1)
+
+    /** Dinero necesario para mudarse: obras con IVA y la nueva fianza (la anterior se recupera). */
+    fun moveCashNeeded(): Long {
+        val next = nextOffice() ?: return 0L
+        return withVat(next.fitOut) + max(0L, next.deposit - office().deposit)
+    }
+
+    fun canMove(): Boolean {
+        val next = nextOffice() ?: return false
+        return tier().index >= next.minTier && cash() >= moveCashNeeded()
+    }
+
+    fun workersTotal(): Int = state.depts.values.sumOf { it.workers }
+
     /** Coste mensual estimado de la plantilla (salario bruto más cuota patronal). */
     fun monthlyPayrollCost(): Long {
         var gross = 0L
-        for (def in Lines.all) if (line(def.id).hasManager) gross += def.managerSalary
-        if (state.hasAssistant) gross += ASSISTANT_SALARY
+        for (def in Departments.all) gross += def.salary * dept(def.id).workers
         return gross + Money.pct(gross, SocialSecurity.EMPLOYER)
     }
+
+    /** Gastos fijos del mes: plantilla, alquiler y suministros (con IVA). */
+    fun monthlyFixedCosts(): Long = monthlyPayrollCost() + withVat(office().rent) + withVat(monthlyUtilities())
+
+    fun monthlyUtilities(): Long = office().utilities + Offices.UTILITIES_PER_WORKER * workersTotal()
+
+    /** Patrimonio de los clientes que lleva la gestoría: cada nivel de cartera es un cliente. */
+    fun managedWealth(): Long {
+        val clients = state.depts.values.sumOf { it.level.toLong() }
+        return Money.times(tier().averageWealth, clients.toDouble())
+    }
+
+    fun clientCount(): Long = state.depts.values.sumOf { it.level.toLong() }
 
     /** IVA que saldría a ingresar si el trimestre se cerrara hoy. */
     fun vatEstimate(): Long = ledger.natural("477") - ledger.natural("472") - ledger.natural("4700")
@@ -176,115 +295,192 @@ class GameEngine(val state: GameState) {
     fun pendingObligations(): List<Obligation> = state.obligations.filter { !it.isPaid }.sortedBy { it.dueDay }
 
     fun receivables(): Long = ledger.natural("430")
-    fun payables(): Long = ledger.natural("400") + ledger.natural("410")
 
     // ───────────────────────────── Acciones del jugador ─────────────────────────────
 
-    /** Pone en marcha un ciclo manual («Vender»). Solo si la línea no tiene encargado. */
-    fun tapLine(id: String): Boolean {
-        val ls = line(id)
-        if (ls.level == 0 || ls.hasManager || ls.running) return false
-        ls.running = true
-        ls.progress = 0.0
+    /** El jefe tramita un expediente a mano. Solo si el departamento no tiene trabajadores. */
+    fun tapDept(id: String): Boolean {
+        val d = dept(id)
+        if (d.level == 0 || d.workers > 0 || d.running) return false
+        d.running = true
+        d.progress = 0.0
         return true
     }
 
-    /** Compra niveles: inversión en inmovilizado material pagada al contado con IVA soportado. */
+    /** Amplía la cartera del departamento: campaña de captación de clientes (627) con IVA soportado. */
     fun buyLevels(id: String, count: Int): Boolean {
-        if (count <= 0) return false
-        val def = Lines.get(id)
-        val ls = line(id)
-        val cost = Lines.costOf(def, ls.level, count)
-        val vat = Money.pct(cost, Vat.GENERAL)
-        if (cash() < cost + vat) return false
-        val firstLevel = ls.level == 0
+        if (count <= 0 || !deptAvailable(id)) return false
+        val def = Departments.get(id)
+        val d = dept(id)
+        val cost = Departments.costOf(def, d.level, count)
+        if (cash() < upgradeCashNeeded(id, count)) return false
+        val opening = d.level == 0
         post(
-            L(
-                "${if (firstLevel) "Apertura" else "Ampliación"} · ${def.name.es} (${def.assetName.es}, +$count ${if (count == 1) "nivel" else "niveles"})",
-                "${if (firstLevel) "Opening" else "Expansion"} · ${def.name.en} (${def.assetName.en}, +$count ${if (count == 1) "level" else "levels"})",
-            ),
-            EntryBuilder().debit(def.assetAccount, cost).debit("472", vat).credit("572", cost + vat),
+            if (opening) L("Apertura del departamento ${def.name.es}: campaña de captación de clientes", "Opening of the ${def.name.en} department: client acquisition campaign")
+            else L("Campaña de captación de clientes · ${def.name.es} (+$count ${if (count == 1) "cliente" else "clientes"})", "Client acquisition campaign · ${def.name.en} (+$count ${if (count == 1) "client" else "clients"})"),
+            EntryBuilder().debit("627", cost).debit("472", Money.pct(cost, Vat.GENERAL)).credit("572", withVat(cost)),
         )
-        val before = ls.level
-        ls.level += count
-        ls.grossCost += cost
-        if (firstLevel && id != "bakery") {
-            event(L("Has abierto: ${def.name.es}.", "You opened: ${def.name.en}."), EventKind.GOOD)
+        if (opening) {
+            buyComputers(d, def, 1, EquipmentTiers.get(0))
+            if (id != "fiscal") event(L("Has abierto el departamento ${def.name.es}.", "You opened the ${def.name.en} department."), EventKind.GOOD)
         }
-        val ms = MILESTONES.filter { it in (before + 1)..ls.level }
+        val before = d.level
+        d.level += count
+        val ms = MILESTONES.filter { it in (before + 1)..d.level }
         if (ms.isNotEmpty()) {
+            gainReputation(REP_MILESTONE * ms.size)
             event(
-                L("${def.name.es} llega al nivel ${ms.last()}: el ciclo es el doble de rápido.", "${def.name.en} reached level ${ms.last()}: cycles are twice as fast."),
+                L("${def.name.es} llega a ${ms.last()} clientes: los expedientes van el doble de rápido (+${REP_MILESTONE * ms.size} de reputación).", "${def.name.en} reached ${ms.last()} clients: files are processed twice as fast (+${REP_MILESTONE * ms.size} reputation)."),
                 EventKind.GOOD,
             )
         }
         return true
     }
 
-    fun hireManager(id: String): Boolean {
-        val ls = line(id)
-        if (ls.level == 0 || ls.hasManager) return false
-        ls.hasManager = true
-        val def = Lines.get(id)
+    /** Contrata a un trabajador. Si ya hay alguien, compra el ordenador del nuevo puesto. */
+    fun hire(id: String): Boolean {
+        if (!canHire(id)) return false
+        val def = Departments.get(id)
+        val d = dept(id)
+        if (d.workers > 0) buyComputers(d, def, 1, EquipmentTiers.get(d.equipmentTier))
+        d.workers++
         event(
             L(
-                "Contratado: ${def.managerTitle.es} (${def.name.es}). Salario de ${fmt(def.managerSalary, Lang.ES)} al mes.",
-                "Hired: ${def.managerTitle.en} (${def.name.en}). Salary of ${fmt(def.managerSalary, Lang.EN)} per month.",
+                "Contratado: ${def.workerTitle.es} en ${def.name.es} (${fmt(def.salary, Lang.ES)} brutos al mes).",
+                "Hired: ${def.workerTitle.en} in ${def.name.en} (${fmt(def.salary, Lang.EN)} gross per month).",
             ),
             EventKind.INFO,
         )
         return true
     }
 
-    fun fireManager(id: String): Boolean {
-        val ls = line(id)
-        if (!ls.hasManager) return false
-        ls.hasManager = false
-        ls.running = false
-        ls.progress = 0.0
+    /** Curso de formación para todo el departamento: otros gastos sociales (649), exento de IVA. */
+    fun train(id: String): Boolean {
+        if (!canTrain(id)) return false
+        val def = Departments.get(id)
+        val d = dept(id)
+        val cost = trainingCost(id)
+        post(
+            L("Curso de formación · ${def.name.es} (nivel ${d.training + 1}, centro autorizado exento de IVA)", "Training course · ${def.name.en} (level ${d.training + 1}, VAT-exempt approved centre)"),
+            EntryBuilder().debit("649", cost).credit("572", cost),
+        )
+        d.training++
+        event(L("La plantilla de ${def.name.es} ha completado la formación de nivel ${d.training}.", "${def.name.en} staff completed level ${d.training} training."), EventKind.GOOD)
         return true
     }
 
-    fun hireAssistant(): Boolean {
-        if (state.hasAssistant) return false
-        state.hasAssistant = true
-        event(L("Contratado un auxiliar contable: la bandeja se clasifica sola.", "Accounting assistant hired: the inbox is processed automatically."), EventKind.INFO)
+    /**
+     * Renueva los ordenadores del departamento. Los antiguos se dan de baja: se cancela su
+     * amortización acumulada y el valor pendiente es una pérdida (671).
+     */
+    fun upgradeEquipment(id: String): Boolean {
+        if (!canUpgradeEquipment(id)) return false
+        val def = Departments.get(id)
+        val d = dept(id)
+        if (d.equipmentGross > 0) {
+            val loss = equipmentBookValue(id)
+            post(
+                L("Baja de los ordenadores sustituidos · ${def.name.es}", "Derecognition of replaced computers · ${def.name.en}"),
+                EntryBuilder().debit("2817", d.equipmentDepreciation).debit("671", loss).credit("217", d.equipmentGross),
+            )
+            d.equipmentGross = 0
+            d.equipmentDepreciation = 0
+        }
+        val next = EquipmentTiers.get(d.equipmentTier + 1)
+        buyComputers(d, def, d.desks, next)
+        d.equipmentTier = next.index
+        event(L("${def.name.es} estrena equipos: ${next.name.es}.", "${def.name.en} gets new equipment: ${next.name.en}."), EventKind.GOOD)
         return true
     }
 
-    fun fireAssistant(): Boolean {
-        if (!state.hasAssistant) return false
-        state.hasAssistant = false
+    /** Compra el siguiente módulo del programa de gestión (aplicaciones informáticas, 206). */
+    fun buySoftware(): Boolean {
+        if (!canBuySoftware()) return false
+        val next = nextSoftware() ?: return false
+        post(
+            L("Licencia de software · ${next.name.es}", "Software licence · ${next.name.en}"),
+            EntryBuilder().debit("206", next.price).debit("472", Money.pct(next.price, Vat.GENERAL)).credit("572", withVat(next.price)),
+        )
+        state.softwareGross += next.price
+        state.softwareTier = next.index
+        event(L("Nuevo programa de gestión: ${next.name.es}.", "New practice software: ${next.name.en}."), EventKind.GOOD)
         return true
     }
 
-    fun setGestoria(active: Boolean) {
-        state.gestoriaActive = active
+    /**
+     * Traslado al local siguiente: se recupera la fianza del anterior, se dan de baja sus obras
+     * (que se quedan en el local), se deposita la nueva fianza y se pagan las obras del nuevo.
+     */
+    fun moveOffice(): Boolean {
+        if (!canMove()) return false
+        val old = office()
+        val next = nextOffice() ?: return false
+        post(
+            L("Devolución de la fianza · ${old.name.es} (${old.city})", "Deposit refund · ${old.name.en} (${old.city})"),
+            EntryBuilder().debit("572", old.deposit).credit("260", old.deposit),
+        )
+        if (state.fitOutGross > 0) {
+            val loss = max(0L, state.fitOutGross - state.fitOutDepreciation)
+            post(
+                L("Baja de las obras del local anterior (quedan en el inmueble)", "Derecognition of the previous office fit-out (left in the building)"),
+                EntryBuilder().debit("2815", state.fitOutDepreciation).debit("671", loss).credit("215", state.fitOutGross),
+            )
+        }
+        post(
+            L("Fianza del local · ${next.name.es} (${next.city})", "Rent deposit · ${next.name.en} (${next.city})"),
+            EntryBuilder().debit("260", next.deposit).credit("572", next.deposit),
+        )
+        post(
+            L("Obras de acondicionamiento · ${next.name.es} (${next.city})", "Fit-out works · ${next.name.en} (${next.city})"),
+            EntryBuilder().debit("215", next.fitOut).debit("472", Money.pct(next.fitOut, Vat.GENERAL)).credit("572", withVat(next.fitOut)),
+        )
+        state.fitOutGross = next.fitOut
+        state.fitOutDepreciation = 0
+        state.officeIndex = next.index
+        event(
+            L("¡Mudanza! La gestoría se traslada a: ${next.name.es} (${next.city}). Ahora tienes ${next.floors} plantas y ${next.desksPerFloor} puestos por planta.",
+                "Moving day! The practice moves to: ${next.name.en} (${next.city}). You now have ${next.floors} floors and ${next.desksPerFloor} desks per floor."),
+            EventKind.GOOD,
+        )
+        return true
     }
 
-    /** Recompensa de un anuncio (o de la compra Premium): ventas ×2 durante 2 horas reales. */
+    /** Recompensa de un anuncio (o de la compra Premium): honorarios ×2 durante 2 horas reales. */
     fun activateBoost() {
         state.boostUntil = max(state.boostUntil, state.playSeconds) + BOOST_SECONDS
     }
 
-    /** El jugador elige una cuenta para un documento. El asiento siempre se registra en la correcta. */
-    fun answerDocument(docId: Int, account: String): DocResult? {
-        val doc = state.documents.firstOrNull { it.id == docId } ?: return null
-        val t = doc.template
-        val correct = account == t.correctAccount
-        resolveDocument(doc, byGestoria = false)
+    /**
+     * El jugador responde una consulta. [option] es el índice de la opción en la plantilla
+     * (0 = correcta). Si acierta, factura los honorarios y gana reputación; si falla, la
+     * rectificación es gratuita y pierde reputación.
+     */
+    fun answerCase(caseId: Int, option: Int): CaseResult? {
+        val pc = state.cases.firstOrNull { it.id == caseId } ?: return null
+        val t = pc.template
+        val correct = option == 0
+        state.cases.remove(pc)
+        val repChange: Long
+        val fee: Long
         if (correct) {
+            fee = pc.fee
+            invoiceCase(t, fee)
             state.streak++
             state.bestStreak = max(state.bestStreak, state.streak)
-            state.docsCorrect++
+            state.casesCorrect++
+            repChange = 3L + pc.tier
+            gainReputation(repChange)
         } else {
+            fee = 0
             state.streak = 0
-            state.docsWrong++
+            state.casesWrong++
+            repChange = -min(REP_WRONG, state.reputation)
+            state.reputation += repChange
         }
-        return DocResult(correct, t.correctAccount, t.explanation, state.streak)
+        return CaseResult(correct, t, fee, repChange, state.streak)
     }
 
-    /** Pago anticipado por el jugador desde la pantalla de Hacienda: sin comisión de la gestoría. */
+    /** Pago anticipado por el jugador desde la pantalla de Hacienda. */
     fun payObligation(id: Int): PayResult {
         val o = state.obligations.firstOrNull { it.id == id } ?: return PayResult.NOT_FOUND
         if (o.isPaid) return PayResult.ALREADY_PAID
@@ -345,7 +541,7 @@ class GameEngine(val state: GameState) {
         var remaining = if (seconds.isNaN()) 0.0 else max(0.0, seconds)
         while (remaining > 1e-9) {
             val step = min(remaining, DAY_SECONDS - state.secondsIntoDay)
-            advanceLines(step)
+            advanceDepts(step)
             state.secondsIntoDay += step
             state.playSeconds += step
             remaining -= step
@@ -364,9 +560,11 @@ class GameEngine(val state: GameState) {
     }
 
     /** Foto del estado antes de ponerse al día; la app la usa para avanzar por tramos sin bloquear la pantalla. */
-    class Snapshot internal constructor(val cash: Long, val sales: Long, val day: Long, val entries: Long, val eventSeq: Long)
+    class Snapshot internal constructor(
+        val cash: Long, val sales: Long, val day: Long, val entries: Long, val eventSeq: Long, val reputation: Long, val autoCases: Int,
+    )
 
-    fun snapshot(): Snapshot = Snapshot(cash(), state.lifetimeSales, state.day, ledger.totalPosted, state.eventSeq)
+    fun snapshot(): Snapshot = Snapshot(cash(), state.lifetimeSales, state.day, ledger.totalPosted, state.eventSeq, state.reputation, state.casesAuto)
 
     fun reportSince(snap: Snapshot, elapsedSeconds: Double): OfflineReport = OfflineReport(
         seconds = elapsedSeconds.coerceIn(0.0, OFFLINE_CAP_SECONDS),
@@ -375,48 +573,49 @@ class GameEngine(val state: GameState) {
         sales = state.lifetimeSales - snap.sales,
         cashChange = cash() - snap.cash,
         entries = ledger.totalPosted - snap.entries,
+        reputation = state.reputation - snap.reputation,
+        casesSolved = state.casesAuto - snap.autoCases,
         events = state.events.filter { it.seq > snap.eventSeq },
     )
 
-    private fun advanceLines(dt: Double) {
-        val mult = salesMultiplier()
-        for (def in Lines.all) {
-            val ls = line(def.id)
-            if (ls.level <= 0) continue
+    private fun advanceDepts(dt: Double) {
+        for (def in Departments.all) {
+            val d = dept(def.id)
+            if (d.level <= 0) continue
             val t = cycleSeconds(def.id)
-            if (ls.hasManager) {
-                ls.progress += dt
-                if (ls.progress >= t) {
-                    val n = floor(ls.progress / t).toLong()
-                    ls.progress -= n * t
-                    produce(def, ls, n, mult)
+            if (d.workers > 0) {
+                d.progress += dt
+                if (d.progress >= t) {
+                    val n = floor(d.progress / t).toLong()
+                    d.progress -= n * t
+                    produce(def, d, n)
                 }
-            } else if (ls.running) {
-                ls.progress += dt
-                if (ls.progress >= t) {
-                    produce(def, ls, 1, mult)
-                    ls.progress = 0.0
-                    ls.running = false
+            } else if (d.running) {
+                d.progress += dt
+                if (d.progress >= t) {
+                    produce(def, d, 1)
+                    d.progress = 0.0
+                    d.running = false
                 }
             }
         }
     }
 
-    private fun produce(def: LineDef, ls: LineState, cycles: Long, mult: Double) {
-        val perCycle = Money.times(def.revenuePerCycle * ls.level, mult)
-        ls.todayRevenue = Money.add(ls.todayRevenue, Money.times(perCycle, cycles.toDouble()))
-        ls.todayCycles += cycles
+    private fun produce(def: DeptDef, d: DeptState, cycles: Long) {
+        val perCycle = revenuePerCycle(def.id)
+        d.todayRevenue = Money.add(d.todayRevenue, Money.times(perCycle, cycles.toDouble()))
+        d.todayCycles += cycles
+        d.completedCycles += cycles
     }
 
     private fun endOfDay() {
         val d = date()
-        for (def in Lines.all) if (line(def.id).hasManager) line(def.id).managerDaysThisMonth++
-        if (state.hasAssistant) state.assistantDaysThisMonth++
+        for (ds in state.depts.values) ds.workerDaysThisMonth += ds.workers
 
-        postDailyOperations()
+        postDailyFees()
         processFlows()
         processObligations()
-        processDocuments()
+        processCases()
 
         state.salesLast30[Math.floorMod(state.day, 30L).toInt()] = state.todaySales
         state.todaySales = 0
@@ -425,9 +624,14 @@ class GameEngine(val state: GameState) {
         if (d.isMonthEnd) {
             postDepreciation()
             postPayroll()
+            postRent()
+            postUtilities()
             postCreditInterest()
+            val active = state.depts.values.count { it.workers > 0 }.toLong()
+            if (active > 0) gainReputation(active)
         }
         if (d.isQuarterEnd) {
+            postInsurance()
             postVatSettlement()
             createWithholdingsObligation()
         }
@@ -446,41 +650,40 @@ class GameEngine(val state: GameState) {
         state.day++
     }
 
-    /** Asientos resumen del día por línea (art. 28.2 del Código de Comercio). */
-    private fun postDailyOperations() {
-        for (def in Lines.all) {
-            val ls = line(def.id)
-            val base = ls.todayRevenue
+    /** Asiento resumen diario de honorarios por departamento (art. 28.2 del Código de Comercio). */
+    private fun postDailyFees() {
+        val t = tier()
+        for (def in Departments.all) {
+            val ds = dept(def.id)
+            val base = ds.todayRevenue
             if (base <= 0) continue
-            val vat = Money.pct(base, def.salesVat)
+            val vat = Money.pct(base, Vat.GENERAL)
             val total = base + vat
-            val creditPart = Money.times(total, def.creditShare)
+            val creditPart = Money.times(total, t.creditShare)
             val cashPart = total - creditPart
             post(
-                L("Ventas del día · ${def.name.es}", "Daily sales · ${def.name.en}"),
-                EntryBuilder().debit("572", cashPart).debit("430", creditPart).credit(def.salesAccount, base).credit("477", vat),
+                L("Honorarios del día · ${def.name.es}", "Daily fees · ${def.name.en}"),
+                EntryBuilder().debit("572", cashPart).debit("430", creditPart).credit("705", base).credit("477", vat),
             )
-            if (creditPart > 0) state.flows.add(PendingFlow(state.day + def.collectionDays, "430", creditPart))
-
-            val pBase = Money.times(base, def.costRatio)
-            val pVat = Money.pct(pBase, def.purchaseVat)
-            val pTotal = pBase + pVat
-            if (pBase > 0) {
-                val concept = L("Compras del día · ${def.name.es}", "Daily purchases · ${def.name.en}")
-                if (def.supplierDays == 0) {
-                    ensureCash(pTotal)
-                    post(concept, EntryBuilder().debit(def.purchaseAccount, pBase).debit("472", pVat).credit("572", pTotal))
-                } else {
-                    post(concept, EntryBuilder().debit(def.purchaseAccount, pBase).debit("472", pVat).credit("400", pTotal))
-                    state.flows.add(PendingFlow(state.day + def.supplierDays, "400", pTotal))
-                }
-            }
+            if (creditPart > 0) state.flows.add(PendingFlow(state.day + t.collectionDays, "430", creditPart))
             state.todaySales += base
             state.lifetimeSales = Money.add(state.lifetimeSales, base)
-            ls.lifetimeRevenue = Money.add(ls.lifetimeRevenue, base)
-            ls.todayRevenue = 0
-            ls.todayCycles = 0
+            ds.lifetimeRevenue = Money.add(ds.lifetimeRevenue, base)
+            ds.todayRevenue = 0
+            ds.todayCycles = 0
         }
+    }
+
+    private fun invoiceCase(t: CaseTemplate, fee: Long) {
+        if (fee <= 0) return
+        val vat = Money.pct(fee, Vat.GENERAL)
+        post(
+            L("Honorarios por consulta · ${t.client.es}", "Consultation fee · ${t.client.en}"),
+            EntryBuilder().debit("572", fee + vat).credit("705", fee).credit("477", vat),
+        )
+        state.todaySales += fee
+        state.lifetimeSales = Money.add(state.lifetimeSales, fee)
+        dept(t.dept).lifetimeRevenue = Money.add(dept(t.dept).lifetimeRevenue, fee)
     }
 
     private fun processFlows() {
@@ -494,7 +697,7 @@ class GameEngine(val state: GameState) {
             it.remove()
         }
         if (collect > 0) {
-            post(L("Cobros de clientes del día", "Customer collections"), EntryBuilder().debit("572", collect).credit("430", collect))
+            post(L("Cobros de clientes del día", "Client collections"), EntryBuilder().debit("572", collect).credit("430", collect))
         }
         if (pay > 0) {
             ensureCash(pay)
@@ -502,21 +705,19 @@ class GameEngine(val state: GameState) {
         }
     }
 
+    /** Tu propio departamento fiscal presenta los modelos el último día; la SS y los dividendos se domicilian. */
     private fun processObligations() {
         for (o in state.obligations.filter { !it.isPaid && it.dueDay <= state.day }) {
             when (o.kind) {
                 ObligationKind.SOCIAL_SECURITY, ObligationKind.DIVIDEND -> settle(o, PaidBy.DIRECT_DEBIT)
-                else -> when {
-                    state.gestoriaActive -> settle(o, PaidBy.GESTORIA)
-                    state.day - o.dueDay >= LATE_AUTO_DAYS -> settle(o, PaidBy.DIRECT_DEBIT)
-                }
+                else -> settle(o, PaidBy.GESTORIA)
             }
         }
     }
 
     private fun settle(o: Obligation, by: PaidBy) {
         val daysLate = state.day - o.dueDay
-        val applies = by != PaidBy.GESTORIA && o.kind != ObligationKind.SOCIAL_SECURITY && o.kind != ObligationKind.DIVIDEND
+        val applies = by == PaidBy.PLAYER && o.kind != ObligationKind.SOCIAL_SECURITY && o.kind != ObligationKind.DIVIDEND
         val surcharge = if (applies) Money.pct(o.amount, Surcharge.extemporaneousBp(daysLate)) else 0L
 
         if (o.kind == ObligationKind.DIVIDEND) {
@@ -543,125 +744,117 @@ class GameEngine(val state: GameState) {
                     EventKind.WARNING,
                 )
             }
-        }
-        if (by == PaidBy.GESTORIA) {
-            o.fee = chargeGestoria(GESTORIA_FILING_FEE, o.label)
-            event(
-                L("La gestoría ha presentado ${o.label.es} el último día (comisión de 45 € + IVA).", "Your accountants filed ${o.label.en} on the last day (fee: €45 + VAT)."),
-                EventKind.TAX,
-            )
+            if (by == PaidBy.GESTORIA) {
+                event(L("Tu departamento fiscal ha presentado ${o.label.es}.", "Your tax department filed ${o.label.en}."), EventKind.TAX)
+            }
         }
         o.paidDay = state.day
         o.paidBy = by
         o.surcharge = surcharge
     }
 
-    private fun chargeGestoria(fee: Long, reason: L): Long {
-        val vat = Money.pct(fee, Vat.GENERAL)
-        val total = fee + vat
-        post(
-            L("Factura de la gestoría · ${reason.es}", "Accountancy firm invoice · ${reason.en}"),
-            EntryBuilder().debit("623", fee).debit("472", vat).credit("410", total),
-        )
-        ensureCash(total)
-        post(L("Pago a la gestoría", "Payment to the accountancy firm"), EntryBuilder().debit("410", total).credit("572", total))
-        return total
+    private fun processCases() {
+        for (pc in state.cases.filter { state.day - it.arrivalDay >= CASE_AUTO_DAYS }) {
+            state.cases.remove(pc)
+            val fee = pc.fee / 2
+            invoiceCase(pc.template, fee)
+            state.casesAuto++
+            gainReputation(REP_AUTO)
+        }
+        if (state.day >= state.nextCaseDay) {
+            if (state.cases.size < MAX_CASES) pickCaseTemplate()?.let { addCase(it) }
+            state.nextCaseDay = state.day + CASE_INTERVAL_DAYS
+        }
     }
 
-    private fun processDocuments() {
-        if (state.hasAssistant) {
-            for (doc in state.documents.toList()) resolveDocument(doc, byGestoria = false)
-        }
-        for (doc in state.documents.filter { state.day - it.arrivalDay >= DOC_AUTO_DAYS }) {
-            resolveDocument(doc, byGestoria = true)
-        }
-        if (date().day == 1) addDocument(Documents.rent)
-        if (state.day >= state.nextDocDay) {
-            addDocument(pickRandomTemplate())
-            state.nextDocDay = state.day + DOC_INTERVAL_DAYS
-        }
-        while (state.documents.size > MAX_DOCS) resolveDocument(state.documents.first(), byGestoria = true)
-    }
-
-    private fun addDocument(t: DocTemplate) {
-        val sales30 = state.salesLast30.fold(0L) { acc, v -> Money.add(acc, v) }
-        val variation = 0.8 + nextDouble() * 0.4
-        val scaled = Money.times(sales30, t.weight * 0.005 * variation)
-        val minimum = Money.times(t.minAmount, variation)
-        val base = max(minimum, scaled)
-        val options = shuffled(listOf(t.correctAccount) + t.distractors)
-        state.documents.add(PendingDocument(state.nextDocId++, t.id, state.day, base, options))
-    }
-
-    private fun pickRandomTemplate(): DocTemplate {
-        val candidates = Documents.random.filter { it.frequency > 0 && it.id != state.lastDocTemplate }
-        val totalWeight = candidates.sumOf { it.frequency }
-        var r = nextInt(totalWeight)
-        for (c in candidates) {
-            if (r < c.frequency) {
-                state.lastDocTemplate = c.id
-                return c
-            }
-            r -= c.frequency
+    private fun pickCaseTemplate(): CaseTemplate? {
+        val tierIndex = tier().index
+        val open = Cases.all.filter { deptOpen(it.dept) && it.minTier <= tierIndex }
+        if (open.isEmpty()) return null
+        val pending = state.cases.map { it.templateId }.toSet()
+        val fresh = open.filter { it.id !in state.recentCases && it.id !in pending }
+        val candidates = fresh.ifEmpty { open.filter { it.id !in pending }.ifEmpty { open } }
+        val weights = candidates.map { (it.minTier + 1) * (it.minTier + 1) }
+        var r = nextInt(weights.sum())
+        for ((i, c) in candidates.withIndex()) {
+            if (r < weights[i]) return c
+            r -= weights[i]
         }
         return candidates.last()
     }
 
-    /** Contabiliza un documento siempre en la cuenta correcta, con su IVA, retención y pago. */
-    private fun resolveDocument(doc: PendingDocument, byGestoria: Boolean) {
-        val t = doc.template
-        val vat = doc.vat
-        val wh = doc.withholding
-        val total = doc.total
-        val concept = L("${t.title.es} · ${t.issuer.es}", "${t.title.en} · ${t.issuer.en}")
-        if (t.directDebit) {
-            ensureCash(total)
-            post(concept, EntryBuilder().debit(t.correctAccount, doc.base).debit("472", vat).credit("4751", wh).credit("572", total))
-        } else {
-            post(concept, EntryBuilder().debit(t.correctAccount, doc.base).debit("472", vat).credit("4751", wh).credit("410", total))
-            ensureCash(total)
-            post(L("Pago · ${t.issuer.es}", "Payment · ${t.issuer.en}"), EntryBuilder().debit("410", total).credit("572", total))
-        }
-        when (t.withholdingModel) {
-            WithholdingModel.M111 -> state.wh111 += wh
-            WithholdingModel.M115 -> state.wh115 += wh
-            WithholdingModel.M123 -> state.wh123 += wh
-            null -> {}
-        }
-        state.documents.remove(doc)
-        if (byGestoria) chargeGestoria(GESTORIA_DOC_FEE, t.title)
+    private fun addCase(t: CaseTemplate) {
+        val tr = tier()
+        val variation = 0.8 + nextDouble() * 0.4
+        val scaled = (incomePerSecond() * CASE_FEE_SECONDS * variation).toLong()
+        val fee = max(Money.times(tr.caseMinFee, variation), scaled)
+        state.cases.add(PendingCase(state.nextCaseId++, t.id, state.day, fee, tr.index, shuffled(listOf(0, 1, 2, 3))))
+        state.recentCases.addLast(t.id)
+        while (state.recentCases.size > 8) state.recentCases.removeFirst()
     }
 
-    /** Amortización lineal mensual de cada línea como grupo homogéneo de bienes. */
+    private fun gainReputation(points: Long) {
+        if (points <= 0) return
+        state.reputation += points
+        val t = tier()
+        if (t.index > state.bestTier) {
+            state.bestTier = t.index
+            event(
+                L(
+                    "¡Tu reputación crece! Ahora llegan clientes del tipo «${t.name.es}»: los honorarios se multiplican por ${t.feeMultiplier.toInt()}.",
+                    "Your reputation grows! Clients of type \"${t.name.en}\" now come to you: fees are multiplied by ${t.feeMultiplier.toInt()}.",
+                ),
+                EventKind.GOOD,
+            )
+        }
+    }
+
+    /** Amortización lineal mensual: ordenadores (4 años), obras del local (10 años) y software (3 años). */
     private fun postDepreciation() {
         val b = EntryBuilder()
         var total = 0L
-        for (def in Lines.all) {
-            val ls = line(def.id)
-            val remaining = ls.grossCost - ls.accumulatedDepreciation
-            if (remaining <= 0) continue
-            val monthly = max(1L, ls.grossCost / (def.usefulLifeYears * 12L))
-            val amount = min(monthly, remaining)
-            b.credit(def.depreciationAccount, amount)
-            ls.accumulatedDepreciation += amount
+        for (ds in state.depts.values) {
+            val amount = monthlyDepreciation(ds.equipmentGross, ds.equipmentDepreciation, EquipmentTiers.USEFUL_LIFE_YEARS)
+            if (amount <= 0) continue
+            ds.equipmentDepreciation += amount
             total += amount
         }
-        if (total <= 0) return
-        b.debit("681", total)
-        post(L("Amortización del inmovilizado · ${Fmt.monthYear(date(), Lang.ES)}", "Depreciation · ${Fmt.monthYear(date(), Lang.EN)}"), b)
+        if (total > 0) b.credit("2817", total)
+        val fitOut = monthlyDepreciation(state.fitOutGross, state.fitOutDepreciation, FIT_OUT_USEFUL_LIFE_YEARS)
+        if (fitOut > 0) {
+            state.fitOutDepreciation += fitOut
+            b.credit("2815", fitOut)
+            total += fitOut
+        }
+        if (total > 0) {
+            b.debit("681", total)
+            post(L("Amortización del inmovilizado material · ${Fmt.monthYear(date(), Lang.ES)}", "Depreciation · ${Fmt.monthYear(date(), Lang.EN)}"), b)
+        }
+        val software = monthlyDepreciation(state.softwareGross, state.softwareDepreciation, SoftwareTiers.USEFUL_LIFE_YEARS)
+        if (software > 0) {
+            state.softwareDepreciation += software
+            post(
+                L("Amortización de las aplicaciones informáticas · ${Fmt.monthYear(date(), Lang.ES)}", "Software amortisation · ${Fmt.monthYear(date(), Lang.EN)}"),
+                EntryBuilder().debit("680", software).credit("2806", software),
+            )
+        }
+    }
+
+    private fun monthlyDepreciation(gross: Long, accumulated: Long, years: Int): Long {
+        val remaining = gross - accumulated
+        if (remaining <= 0) return 0
+        return min(max(1L, gross / (years * 12L)), remaining)
     }
 
     private fun postPayroll() {
         val d = date()
         val daysInMonth = d.lengthOfMonth
         var gross = 0L
-        for (def in Lines.all) {
-            val ls = line(def.id)
-            if (ls.managerDaysThisMonth > 0) gross += def.managerSalary * min(ls.managerDaysThisMonth, daysInMonth) / daysInMonth
-            ls.managerDaysThisMonth = 0
+        for (def in Departments.all) {
+            val ds = dept(def.id)
+            if (ds.workerDaysThisMonth > 0) gross += def.salary * ds.workerDaysThisMonth / daysInMonth
+            ds.workerDaysThisMonth = 0
         }
-        if (state.assistantDaysThisMonth > 0) gross += ASSISTANT_SALARY * min(state.assistantDaysThisMonth, daysInMonth) / daysInMonth
-        state.assistantDaysThisMonth = 0
         if (gross <= 0) return
 
         val ssEmployer = Money.pct(gross, SocialSecurity.EMPLOYER)
@@ -681,6 +874,43 @@ class GameEngine(val state: GameState) {
             ObligationKind.SOCIAL_SECURITY,
             L("Seguros sociales de ${month.es}", "Social Security for ${month.en}"),
             "476", ssEmployer + ssEmployee, d.endOfNextMonth().epochDay,
+        )
+    }
+
+    /** Alquiler del local: IVA del 21 % y, si el arrendador es persona física, retención del 19 % (modelo 115). */
+    private fun postRent() {
+        val o = office()
+        val vat = Money.pct(o.rent, Vat.GENERAL)
+        val wh = if (o.landlordIsIndividual) Money.pct(o.rent, Withholding.RENT) else 0L
+        val total = o.rent + vat - wh
+        val month = Fmt.monthYear(date(), Lang.ES)
+        post(
+            L("Alquiler de ${month} · ${o.landlord.es}", "Rent for ${Fmt.monthYear(date(), Lang.EN)} · ${o.landlord.en}"),
+            EntryBuilder().debit("621", o.rent).debit("472", vat).credit("4751", wh).credit("410", total),
+        )
+        ensureCash(total)
+        post(L("Pago del alquiler · ${o.landlord.es}", "Rent payment · ${o.landlord.en}"), EntryBuilder().debit("410", total).credit("572", total))
+        state.wh115 += wh
+    }
+
+    private fun postUtilities() {
+        val base = monthlyUtilities()
+        val vat = Money.pct(base, Vat.GENERAL)
+        post(
+            L("Suministros del mes (luz, agua e internet)", "Monthly utilities (power, water and internet)"),
+            EntryBuilder().debit("628", base).debit("472", vat).credit("410", base + vat),
+        )
+        ensureCash(base + vat)
+        post(L("Pago de los suministros", "Utilities payment"), EntryBuilder().debit("410", base + vat).credit("572", base + vat))
+    }
+
+    /** Prima trimestral del seguro de la oficina: exenta de IVA (art. 20.Uno.16.º LIVA). */
+    private fun postInsurance() {
+        val premium = office().insuranceQuarterly
+        ensureCash(premium)
+        post(
+            L("Seguro de responsabilidad civil y multirriesgo de la oficina", "Professional liability and office insurance"),
+            EntryBuilder().debit("625", premium).credit("572", premium),
         )
     }
 
@@ -839,6 +1069,17 @@ class GameEngine(val state: GameState) {
         val draw = amount - available
         post(L("Disposición de la póliza de crédito", "Credit line drawdown"), EntryBuilder().debit("572", draw).credit("5201", draw))
     }
+
+    private fun buyComputers(d: DeptState, def: DeptDef, count: Int, tier: EquipmentTier) {
+        val cost = tier.price * count
+        post(
+            L("Compra de ${if (count == 1) "un ordenador" else "$count ordenadores"} · ${def.name.es} (${tier.name.es})", "Purchase of ${if (count == 1) "a computer" else "$count computers"} · ${def.name.en} (${tier.name.en})"),
+            EntryBuilder().debit("217", cost).debit("472", Money.pct(cost, Vat.GENERAL)).credit("572", withVat(cost)),
+        )
+        d.equipmentGross += cost
+    }
+
+    private fun withVat(base: Long): Long = base + Money.pct(base, Vat.GENERAL)
 
     private fun addObligation(kind: ObligationKind, label: L, account: String, amount: Long, dueDay: Long) {
         state.obligations.add(Obligation(state.nextObligationId++, kind, label, account, amount, state.day, dueDay))
