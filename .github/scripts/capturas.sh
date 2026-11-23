@@ -44,8 +44,10 @@ shot 09-torre-arriba 3
 # 4) La misma torre de noche: cielo estrellado, farolas y ventanas encendidas.
 adb shell am start -n $ACT --activity-single-top --ef night 1.0 --ei tab 0
 shot 10-torre-noche-arriba 4
-adb shell input swipe 540 1600 540 600 300
-shot 11-torre-noche 3
+# Arrastra dentro de la torre (no en la lista de abajo) para bajar hasta la recepción.
+adb shell input swipe 540 1150 540 350 300
+adb shell input swipe 540 1150 540 350 300
+shot 11-torre-noche-recepcion 3
 
 adb logcat -d '*:E' | grep -i -A 20 "balancetycoon\|AndroidRuntime" | head -200 > $OUT/errores.txt || true
 ls -l $OUT

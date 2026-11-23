@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -257,9 +259,9 @@ private fun EntryCaseCard(pc: PendingCase, engine: GameEngine, lang: Lang, onSub
             }
         }
         Spacer(Modifier.height(2.dp))
-        // Cuentas candidatas en dos columnas.
+        // Cuentas candidatas en dos columnas, con los botones de cada fila a la misma altura.
         for (row in candidates.chunked(2)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (code in row) {
                     val used = code in chosen
                     GameButton(
@@ -271,11 +273,12 @@ private fun EntryCaseCard(pc: PendingCase, engine: GameEngine, lang: Lang, onSub
                             val empty = next.indexOfFirst { it == null }
                             if (empty >= 0) selected = empty
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                         color = if (used) Palette.Gold else Palette.Mint,
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                     ) {
-                        PixelText(code, size = 15.sp, color = Palette.Stroke)
+                        // El código va en la fuente normal: en la pixelada, el 5 se confunde con la S.
+                        Text(code, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Palette.Stroke)
                         Text(
                             Pgc.get(code).name.get(lang),
                             style = MaterialTheme.typography.labelSmall,
@@ -296,7 +299,7 @@ private fun EntryCaseCard(pc: PendingCase, engine: GameEngine, lang: Lang, onSub
                     chosen = List(lines.size) { null }
                     selected = 0
                 },
-                color = Palette.Muted,
+                color = Palette.Red,
             )
             PriceButton(
                 stringResource(R.string.entry_submit), null,

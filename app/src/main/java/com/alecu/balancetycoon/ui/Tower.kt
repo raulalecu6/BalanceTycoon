@@ -723,6 +723,11 @@ private fun DrawScope.drawDesk(ox: Float, oy: Float, u: Float, cx: Float, tier: 
 
 // ───────────────────────────── Recepción ─────────────────────────────
 
+private const val COUNTER_X = 3f
+private const val COUNTER_W = 16f
+private const val BOSS_X = 8.8f
+private const val QUEUE_GAP = 6f
+
 private fun DrawScope.drawLobby(
     g: TowerGeometry, engine: GameEngine, arrivals: Map<Int, Long>, lang: Lang, m: TextMeasurer, density: Density, frame: Long, officeIndex: Int,
 ) {
@@ -745,13 +750,6 @@ private fun DrawScope.drawLobby(
         k++
     }
     if (officeIndex >= 4) px(ox, oy, u, 0f, 1f, w, 0.6f, Palette.Gold)
-    // Mostrador de recepción y rótulo colgado en la pared.
-    px(ox, oy, u, 3f, 13.5f, 18f, 7.5f, Color(0xFF3F5D6B))
-    px(ox, oy, u, 3f, 13.5f, 18f, 1.2f, Palette.Gold)
-    px(ox, oy, u, 4.5f, 1f, 0.3f, 2.2f, Palette.Outline)
-    px(ox, oy, u, 19.2f, 1f, 0.3f, 2.2f, Palette.Outline)
-    px(ox, oy, u, 3.5f, 3f, 17f, 3.6f, Color(0xFF3F5D6B))
-    label(m, density, if (lang == Lang.ES) "RECEPCIÓN" else "RECEPTION", ox + 12f * u, oy + 3.5f * u, 2.6f, u, Palette.Cream, centered = true, shadow = false)
     // Cuadro en la pared de las sedes grandes.
     if (officeIndex >= 2) {
         px(ox, oy, u, w - 19.5f, 2.5f, 6.4f, 5f, Palette.GoldDark)
@@ -767,21 +765,27 @@ private fun DrawScope.drawLobby(
     // Planta grande.
     px(ox, oy, u, w - 18f, 17f, 3.4f, 4f, Color(0xFFA0522D))
     px(ox, oy, u, w - 19f, 11f, 5.4f, 6.4f, Color(0xFF3E8E41))
-    // El jefe o la jefa de la gestoría (tú), de pie con corbata dorada.
-    val bx = 26f
+    // El jefe o la jefa de la gestoría (tú), detrás del mostrador con corbata dorada.
+    val bx = BOSS_X
     val bob = ((frame / 400) % 2).toFloat() * 0.3f
-    px(ox, oy, u, bx, 16f, 1.5f, 5f, Color(0xFF263042))
-    px(ox, oy, u, bx + 2f, 16f, 1.5f, 5f, Color(0xFF263042))
     px(ox, oy, u, bx - 0.5f, 9.5f - bob, 4.5f, 6.8f, Color(0xFF2F3E56))
     px(ox, oy, u, bx + 1.3f, 9.5f - bob, 1f, 4f, Palette.Gold)
     px(ox, oy, u, bx - 0.1f, 5.6f - bob, 3.8f, 3.9f, SKINS[0])
     px(ox, oy, u, bx - 0.3f, 5f - bob, 4.2f, 1.4f, HAIRS[1])
     px(ox, oy, u, bx + 0.7f, 7.2f - bob, 0.6f, 0.6f, Palette.Outline)
     px(ox, oy, u, bx + 2.5f, 7.2f - bob, 0.6f, 0.6f, Palette.Outline)
-    // Clientes que esperan su consulta frente al mostrador; los nuevos entran andando desde la puerta.
+    // Mostrador de recepción, con el rótulo en el frontal.
+    px(ox, oy, u, COUNTER_X, 13.5f, COUNTER_W, 7.5f, Color(0xFF3F5D6B))
+    px(ox, oy, u, COUNTER_X, 13.5f, COUNTER_W, 1.2f, Palette.Gold)
+    px(ox, oy, u, COUNTER_X + 1f, 15.4f, COUNTER_W - 2f, 4.8f, Color(0xFF34505C))
+    label(m, density, if (lang == Lang.ES) "RECEPCIÓN" else "RECEPTION", ox + (COUNTER_X + COUNTER_W / 2f) * u, oy + 15.9f * u, 2.6f, u, Palette.Cream, centered = true, shadow = false)
+    // Clientes que esperan su consulta en fila a la derecha del mostrador (los VIP, primero);
+    // los nuevos entran andando desde la puerta.
     val queue = cases.sortedWith(compareByDescending<com.alecu.balancetycoon.core.game.PendingCase> { it.vip }.thenBy { it.id })
+    val lastSlot = w - 26f
     for ((i, pc) in queue.withIndex()) {
-        val slot = 4f + i * 3.3f
+        val slot = COUNTER_X + COUNTER_W + 1.5f + i * QUEUE_GAP
+        if (slot > lastSlot) break
         val since = frame - (arrivals[pc.id] ?: (frame - 60_000L))
         val walk = (since / 1600f).coerceIn(0f, 1f)
         val doorX = w - 9f
@@ -796,16 +800,16 @@ private fun DrawScope.drawLobby(
         } else {
             if (pendingCases == 1) "1 question!" else "$pendingCases questions!"
         }
-        val style = TextStyle(fontFamily = PixelFont, fontSize = with(density) { (u * 3f).toSp() }, color = Palette.Stroke)
+        val style = TextStyle(fontFamily = PixelFont, fontSize = with(density) { (u * 2.6f).toSp() }, color = Palette.Stroke)
         val layout = m.measure(pixelString(text), style)
         val bw = layout.size.width + 3f * u
-        val bh = layout.size.height + 1.5f * u
-        val bxPx = ox + (bx + 4.5f) * u
-        val byPx = oy + 1.2f * u - pulse * u * 0.6f
+        val bh = layout.size.height + 1.1f * u
+        val bxPx = ox + (bx + 4.6f) * u
+        val byPx = oy + 1.0f * u - pulse * u * 0.4f
         drawRoundRect(Palette.Stroke, Offset(bxPx - 0.4f * u, byPx - 0.4f * u), Size(bw + 0.8f * u, bh + 0.8f * u), CornerRadius(1.6f * u, 1.6f * u))
         drawRoundRect(Color.White, Offset(bxPx, byPx), Size(bw, bh), CornerRadius(1.4f * u, 1.4f * u))
         px(bxPx, byPx, u, 0.4f, bh / u - 0.1f, 1.6f, 1.6f, Color.White)
-        drawText(layout, topLeft = Offset(bxPx + 1.5f * u, byPx + 0.75f * u))
+        drawText(layout, topLeft = Offset(bxPx + 1.5f * u, byPx + 0.55f * u))
     }
     // Línea del suelo de la calle.
     px(ox, oy, u, -1f, FLOOR_UNITS - 0.3f, w + 2f, 0.6f, Palette.Outline)
@@ -833,7 +837,7 @@ private fun DrawScope.drawClient(ox: Float, oy: Float, u: Float, x: Float, seed:
     if (vip) {
         px(ox, oy, u, x - 0.1f, 7f, 2.6f, 0.8f, Color(0xFF111111))
         val spark = (sin(t / 200.0) * 0.5 + 0.5).toFloat()
-        px(ox, oy, u, x + 1.3f, 2.4f - spark, 1f, 1f, Palette.Gold, 0.5f + 0.5f * spark)
+        px(ox, oy, u, x - 1.6f, 6.4f - spark, 1f, 1f, Palette.Gold, 0.5f + 0.5f * spark)
     } else {
         px(ox, oy, u, x + 0.6f, 7.2f, 0.6f, 0.6f, Palette.Outline)
     }

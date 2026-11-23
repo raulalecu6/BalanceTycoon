@@ -2,7 +2,9 @@
 
 Juego idle/tycoon para Android en el que diriges una gestoría: empiezas en un bajo de Tomelloso con autónomos como clientes y, resolviendo sus consultas de IVA, nóminas, contabilidad, mercantil y patrimonios, ganas reputación, contratas plantilla, renuevas los ordenadores y te mudas a locales cada vez más grandes hasta una torre en Madrid. Mientras tanto, el juego lleva de verdad la contabilidad de la gestoría (libro diario, mayor, PyG, balance, IVA trimestral, nóminas, Impuesto sobre Sociedades y reparto del resultado) según el PGC PYMES y la normativa española de 2026, simplificada.
 
-Autor: Raúl Marian Alecu. Prototipo 0.2 (10 de noviembre de 2026).
+La versión 0.3 añade consultas de asiento completo (debe y haber), clientes VIP, temporadas del calendario fiscal, imprevistos, el traspaso de la gestoría con puntos de experiencia, música y efectos de sonido propios y una torre con día y noche.
+
+Autor: Raúl Marian Alecu. Versión 0.3 (24 de noviembre de 2026).
 
 ## Descargar el APK de prueba
 
@@ -36,8 +38,9 @@ Incluye los tests de contabilidad, fiscalidad, cierre del ejercicio, guardado y 
 
 - `core/`: motor del juego en Kotlin puro (contabilidad, impuestos, economía, guardado). No depende de Android.
 - `app/`: app Android con Jetpack Compose (torre de la gestoría y pestañas Plantilla, Equipos, Clientes y Cuentas).
+- `tools/`: `generar_audio.py`, que sintetiza la música y los efectos de sonido (NumPy + FFmpeg).
 - `docs/`: documento de diseño (`balance-tycoon-gdd.md`) y estado actual (`balance-tycoon-estado-actual.md`).
 
 ## Aviso
 
-Las empresas, clientes y personas que aparecen en el juego son ficticios. Fuente Pixelify Sans con licencia SIL Open Font License 1.1 (`docs/licencias`). El juego simplifica la normativa y no constituye asesoramiento fiscal ni contable.
+Las empresas, clientes y personas que aparecen en el juego son ficticios. Fuente Pixelify Sans con licencia SIL Open Font License 1.1 (`docs/licencias`). La música y los efectos de sonido se han generado por código para este proyecto. El juego simplifica la normativa y no constituye asesoramiento fiscal ni contable.
