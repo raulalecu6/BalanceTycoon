@@ -165,7 +165,7 @@
     <string name="default_company_numbered">My Practice %1$s, S.L.</string>
     <string name="season_dates">Season from %1$s to %2$s.</string>
     <string name="breakdown_title">💥 Breakdown in %1$s</string>
-    <string name="breakdown_body">The computers in %1$s have stopped working and the department bills half. The warranty service will come on %2$s; if you don't want to wait, a technician can fix it today for %3$s + VAT (account 622, Repairs and maintenance).</string>
+    <string name="breakdown_body">The computers in %1$s have stopped working and the department bills half. The warranty service will come on %2$s; if you don\'t want to wait, a technician can fix it today for %3$s + VAT (account 622, Repairs and maintenance).</string>
     <string name="breakdown_repair">Repair now</string>
     <string name="flu_title">🤧 Flu in %1$s</string>
     <string name="flu_body">Some of the %1$s staff are off sick and the department bills 25%% less until %2$s.\n\nIn Spain, for sick leave due to a common illness, the first three days carry no benefit (unless the collective agreement improves it); days 4 to 15 are paid by the employer and, from day 16, by Social Security or the mutual insurer.</string>
@@ -177,7 +177,7 @@
     <!-- 0.3: VIP clients and journal-entry cases -->
     <string name="experience_line">🎓 Experience: %1$d points (+%2$d%% on all income)</string>
     <string name="vip_badge">⭐ VIP · %1$d d</string>
-    <string name="vip_hint">VIP client: pays triple, but will go to another practice if you don't answer in time (−2 reputation).</string>
+    <string name="vip_hint">VIP client: pays triple, but will go to another practice if you don\'t answer in time (−2 reputation).</string>
     <string name="entry_badge">📒 Journal entry</string>
     <string name="entry_hint">Tap a line of the entry and choose its account. The amounts are already filled in.</string>
     <string name="entry_account">Account</string>
@@ -190,7 +190,7 @@
 
     <!-- 0.3: sale of the practice (prestige) -->
     <string name="prestige_title">Sell the practice</string>
-    <string name="prestige_body" formatted="false">Sell the company's shares and found a new practice from scratch. What you've learned stays with you: each experience point adds 10% to all income forever.</string>
+    <string name="prestige_body" formatted="false">Sell the company\'s shares and found a new practice from scratch. What you\'ve learned stays with you: each experience point adds 10% to all income forever.</string>
     <string name="prestige_current">Practice no. %1$d · %2$d experience points (×%3$s)</string>
     <string name="prestige_points">Points you would earn now: %1$d</string>
     <string name="prestige_sale">Sale price (net equity): %1$s</string>
