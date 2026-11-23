@@ -25,12 +25,16 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -92,45 +96,58 @@ fun BalanceTycoonApp(vm: GameViewModel) {
         }
     }
 
-    Scaffold(
-        containerColor = Palette.PanelDark,
-        topBar = { TopBar(engine, lang, onReputation = { vm.tab = 3 }, onOffices = { showOffices = true }, onSettings = { showSettings = true }) },
-        bottomBar = { BottomNav(vm, engine) },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when (vm.tab) {
-                0 -> OfficeScreen(vm, engine, lang, tick)
-                1 -> StaffScreen(vm, engine, lang, tick)
-                2 -> EquipmentScreen(vm, engine, lang, tick)
-                3 -> ClientsScreen(vm, engine, lang, tick)
-                else -> BooksScreen(vm, engine, lang, tick)
+    CompositionLocalProvider(LocalGameAudio provides vm.audio) {
+        Box(Modifier.fillMaxSize()) {
+            Scaffold(
+                containerColor = Palette.PanelDark,
+                topBar = {
+                    TopBar(
+                        engine, lang,
+                        onReputation = { vm.selectTab(3) },
+                        onOffices = { vm.playTap(); showOffices = true },
+                        onSettings = { vm.playTap(); showSettings = true },
+                    )
+                },
+                bottomBar = { BottomNav(vm, engine) },
+                snackbarHost = { SnackbarHost(snackbar) },
+            ) { padding ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    when (vm.tab) {
+                        0 -> OfficeScreen(vm, engine, lang, tick)
+                        1 -> StaffScreen(vm, engine, lang, tick)
+                        2 -> EquipmentScreen(vm, engine, lang, tick)
+                        3 -> ClientsScreen(vm, engine, lang, tick)
+                        else -> BooksScreen(vm, engine, lang, tick)
+                    }
+                    if (vm.catchingUp) CatchUpOverlay()
+                }
             }
-            if (vm.catchingUp) CatchUpOverlay()
+            // Confeti por encima de todo al subir de tipo de cliente, mudarse o traspasar.
+            Confetti(vm.celebration, Modifier.fillMaxSize())
         }
-    }
 
-    vm.offlineReport?.let { report ->
-        OfflineDialog(
-            report = report,
-            lang = lang,
-            onClose = { vm.offlineReport = null },
-            onBoost = {
-                vm.offlineReport = null
-                vm.watchAdForBoost()
-            },
-        )
+        vm.offlineReport?.let { report ->
+            OfflineDialog(
+                report = report,
+                lang = lang,
+                onClose = { vm.offlineReport = null },
+                onBoost = {
+                    vm.offlineReport = null
+                    vm.watchAdForBoost()
+                },
+            )
+        }
+        if (vm.startedFresh) {
+            AlertDialog(
+                onDismissRequest = { vm.startedFresh = false },
+                title = { Text(stringResource(R.string.fresh_title)) },
+                text = { Text(stringResource(R.string.fresh_body)) },
+                confirmButton = { TextButton(onClick = { vm.startedFresh = false }) { Text(stringResource(R.string.continue_btn)) } },
+            )
+        }
+        if (showOffices) OfficesDialog(vm, engine, lang) { showOffices = false }
+        if (showSettings) SettingsDialog(vm, engine, onReset = { vm.resetGame() }, onClose = { showSettings = false })
     }
-    if (vm.startedFresh) {
-        AlertDialog(
-            onDismissRequest = { vm.startedFresh = false },
-            title = { Text(stringResource(R.string.fresh_title)) },
-            text = { Text(stringResource(R.string.fresh_body)) },
-            confirmButton = { TextButton(onClick = { vm.startedFresh = false }) { Text(stringResource(R.string.continue_btn)) } },
-        )
-    }
-    if (showOffices) OfficesDialog(vm, engine, lang) { showOffices = false }
-    if (showSettings) SettingsDialog(engine, onReset = { vm.resetGame() }, onClose = { showSettings = false })
 }
 
 @Composable
@@ -203,7 +220,7 @@ private fun BottomNav(vm: GameViewModel, engine: GameEngine) {
             }
             Box(Modifier.weight(1f)) {
                 GameButton(
-                    onClick = { vm.tab = i },
+                    onClick = { vm.selectTab(i) },
                     color = if (vm.tab == i) Palette.Gold else Palette.Mint,
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp),
@@ -264,10 +281,91 @@ private fun OfficesDialog(vm: GameViewModel, engine: GameEngine, lang: Lang, onC
                     }
                 }
                 Hint(stringResource(R.string.offices_note))
+                HorizontalDivider()
+                PrestigeSection(vm, engine, lang, onDone = onClose)
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
     )
+}
+
+/**
+ * Traspaso de la gestoría (prestigio): se venden las participaciones y se funda otra sociedad
+ * que empieza de cero, pero con puntos de experiencia que suben todos los ingresos.
+ */
+@Composable
+private fun PrestigeSection(vm: GameViewModel, engine: GameEngine, lang: Lang, onDone: () -> Unit) {
+    val s = engine.state
+    val pv = engine.prestigePreview()
+    var confirm by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .border(2.dp, if (engine.canPrestige()) Palette.Gold else Palette.Stroke, MaterialTheme.shapes.small)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        PixelText("🔑 " + stringResource(R.string.prestige_title), size = 16.sp, color = Palette.Gold, maxLines = 2)
+        Hint(stringResource(R.string.prestige_body))
+        if (s.experience > 0 || s.prestigeCount > 0) {
+            Hint(stringResource(R.string.prestige_current, s.prestigeCount + 1, s.experience, Fmt.decimal2(pv.multiplierNow, lang)), Palette.Mint)
+        }
+        Text(stringResource(R.string.prestige_points, pv.points), fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.prestige_sale, moneyShort(pv.saleValue, lang)))
+        Text(stringResource(R.string.prestige_multiplier, Fmt.decimal2(pv.multiplierNow, lang), Fmt.decimal2(pv.multiplierAfter, lang)))
+        val nextPointSales = (pv.points + 1).toLong() * (pv.points + 1) * 100_000_000L
+        Hint(stringResource(R.string.prestige_next_point, moneyShort(nextPointSales, lang), moneyShort(s.lifetimeSales, lang)))
+        if (s.officeIndex < GameEngine.PRESTIGE_MIN_OFFICE) {
+            Hint(stringResource(R.string.prestige_need_office, Offices.all[GameEngine.PRESTIGE_MIN_OFFICE].name.get(lang)), Palette.Red)
+        } else if (pv.points < 1) {
+            Hint(stringResource(R.string.prestige_need_sales, moneyShort(100_000_000L, lang)), Palette.Red)
+        }
+        PriceButton(
+            title = stringResource(R.string.prestige_btn),
+            price = null,
+            onClick = { confirm = true },
+            enabled = engine.canPrestige(),
+            modifier = Modifier.fillMaxWidth(),
+            color = Palette.Gold,
+        )
+    }
+    if (confirm) {
+        var name by remember { mutableStateOf(vm.suggestedNextName()) }
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            containerColor = Palette.Panel,
+            title = { PixelText(stringResource(R.string.prestige_confirm_title), size = 18.sp, color = Palette.Gold, maxLines = 2) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.prestige_confirm_body,
+                            s.companyName,
+                            moneyShort(pv.saleValue, lang),
+                            engine.date().year + 1,
+                            pv.experienceAfter,
+                            Fmt.decimal2(pv.multiplierAfter, lang),
+                        ),
+                    )
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it.take(40) },
+                        label = { Text(stringResource(R.string.prestige_new_name)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    onDone()
+                    vm.prestige(name)
+                }) { Text(stringResource(R.string.prestige_confirm_btn)) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 @Composable
@@ -327,7 +425,7 @@ private fun OfflineDialog(report: OfflineReport, lang: Lang, onClose: () -> Unit
 }
 
 @Composable
-private fun SettingsDialog(engine: GameEngine, onReset: () -> Unit, onClose: () -> Unit) {
+private fun SettingsDialog(vm: GameViewModel, engine: GameEngine, onReset: () -> Unit, onClose: () -> Unit) {
     var confirmReset by remember { mutableStateOf(false) }
     if (confirmReset) {
         AlertDialog(
@@ -351,9 +449,21 @@ private fun SettingsDialog(engine: GameEngine, onReset: () -> Unit, onClose: () 
         containerColor = Palette.Panel,
         title = { PixelText(stringResource(R.string.settings), size = 20.sp, color = Palette.Gold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.settings_company), style = MaterialTheme.typography.labelMedium)
                 Text(engine.state.companyName, fontWeight = FontWeight.SemiBold)
+                if (engine.state.prestigeCount > 0) {
+                    Hint(stringResource(R.string.settings_generation, engine.state.prestigeCount + 1, engine.state.experience))
+                }
+                HorizontalDivider()
+                val audio = vm.audio
+                SettingSwitch("🎵 " + stringResource(R.string.settings_music), audio.musicOn) { audio.setMusic(it) }
+                SettingSwitch("🔊 " + stringResource(R.string.settings_sound), audio.soundOn) {
+                    audio.setSound(it)
+                    if (it) vm.playTap()
+                }
+                SettingSwitch("📳 " + stringResource(R.string.settings_vibration), audio.vibrationOn) { audio.setVibration(it) }
+                HorizontalDivider()
                 OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.settings_reset))
                 }
@@ -364,4 +474,19 @@ private fun SettingsDialog(engine: GameEngine, onReset: () -> Unit, onClose: () 
         },
         confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
     )
+}
+
+@Composable
+private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = Palette.MintDark, checkedThumbColor = Palette.Cream),
+        )
+    }
 }

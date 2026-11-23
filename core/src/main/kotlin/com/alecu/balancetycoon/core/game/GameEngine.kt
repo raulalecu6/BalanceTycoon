@@ -17,14 +17,30 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sqrt
 
-/** Resultado de responder una consulta de un cliente. */
+/** Resultado de responder una consulta de un cliente (de opción múltiple o de asiento). */
 data class CaseResult(
     val correct: Boolean,
-    val template: CaseTemplate,
+    val info: ClientCase,
     val fee: Long,
     val reputationChange: Long,
     val streak: Int,
+    val vip: Boolean = false,
+    val quiz: CaseTemplate? = null,
+    val entry: EntryCaseTemplate? = null,
+    /** Asiento correcto y cuentas elegidas por el jugador, en una consulta de asiento. */
+    val lines: List<EntryLine> = emptyList(),
+    val given: List<String> = emptyList(),
+)
+
+/** Lo que pasaría al traspasar la gestoría y fundar otra. */
+data class PrestigePreview(
+    val points: Int,
+    val saleValue: Long,
+    val experienceAfter: Int,
+    val multiplierNow: Double,
+    val multiplierAfter: Double,
 )
 
 /** Propuesta de aplicación del resultado según la LSC. */
@@ -78,6 +94,16 @@ class GameEngine(val state: GameState) {
         const val REP_WRONG = 3L
         const val REP_AUTO = 1L
         const val REP_MILESTONE = 10L
+        /** Probabilidad de que una consulta nueva sea de asiento completo, y cuánto más paga. */
+        const val ENTRY_CHANCE = 0.35
+        const val ENTRY_FEE = 1.5
+        /** Cliente VIP: paga el triple, da el doble de reputación y se va si no se le responde en 3 días. */
+        const val VIP_DAYS = 3L
+        const val VIP_FEE = 3.0
+        const val REP_VIP_LOST = 2L
+        /** Cada punto de experiencia de gestorías anteriores suma un 10 % a los honorarios. */
+        const val EXPERIENCE_STEP = 0.10
+        const val PRESTIGE_MIN_OFFICE = 2
         val INITIAL_CAPITAL: Long = Money.euros(3_000L)
 
         /** Crea una partida nueva: constitución de la sociedad, fianza del local y apertura del departamento fiscal. */
@@ -104,6 +130,7 @@ class GameEngine(val state: GameState) {
         )
         buyLevels("fiscal", 1)
         state.nextCaseDay = state.day + 1
+        announceSeasons()
         event(
             L("Se ha constituido ${state.companyName}. Abres la gestoría en un bajo de Tomelloso.", "${state.companyName} has been incorporated. You open the practice in a small office in Tomelloso."),
             EventKind.GOOD,
@@ -128,12 +155,26 @@ class GameEngine(val state: GameState) {
     fun deptAvailable(id: String): Boolean = Departments.indexOf(id) < office().floors
     fun deptOpen(id: String): Boolean = dept(id).level > 0
 
-    /** Racha de consultas bien resueltas (+2 % por acierto, máx. +20 %) y turbo ×2. */
+    /** Racha de consultas bien resueltas (+2 % por acierto, máx. +20 %), turbo ×2, software, clientes y experiencia. */
     fun globalMultiplier(): Double {
         val streakBonus = 1.0 + min(state.streak, STREAK_CAP) * STREAK_STEP
         val boost = if (boostActive()) 2.0 else 1.0
-        return streakBonus * boost * SoftwareTiers.get(state.softwareTier).multiplier * tier().feeMultiplier
+        return streakBonus * boost * SoftwareTiers.get(state.softwareTier).multiplier * tier().feeMultiplier * experienceMultiplier()
     }
+
+    fun experienceMultiplier(): Double = 1.0 + EXPERIENCE_STEP * state.experience
+
+    fun activeSeasons(): List<Season> = Seasons.active(date())
+
+    /** Temporadas e imprevistos que afectan al departamento (×2 en la renta, ×0,5 con una avería...). */
+    fun eventMultiplier(id: String): Double {
+        var m = 1.0
+        for (season in activeSeasons()) if (season.dept == id) m *= season.multiplier
+        for (incident in state.incidents) if (incident.dept == id) m *= incident.multiplier
+        return m
+    }
+
+    fun incidentFor(id: String): Incident? = state.incidents.firstOrNull { it.dept == id }
 
     /** Multiplicador propio del departamento: trabajadores, equipos y formación. */
     fun deptMultiplier(id: String): Double {
@@ -151,7 +192,7 @@ class GameEngine(val state: GameState) {
     fun revenuePerCycle(id: String): Long {
         val def = Departments.get(id)
         val d = dept(id)
-        return Money.times(def.feePerCycle * d.level, deptMultiplier(id) * globalMultiplier())
+        return Money.times(def.feePerCycle * d.level, deptMultiplier(id) * globalMultiplier() * eventMultiplier(id))
     }
 
     /** Facturación por segundo del departamento si estuviera trabajando sin parar (céntimos). */
@@ -322,7 +363,7 @@ class GameEngine(val state: GameState) {
         )
         if (opening) {
             buyComputers(d, def, 1, EquipmentTiers.get(0))
-            if (id != "fiscal") event(L("Has abierto el departamento ${def.name.es}.", "You opened the ${def.name.en} department."), EventKind.GOOD)
+            if (id != "fiscal") event(L("Has abierto el departamento ${def.name.es}.", "You opened the ${def.name.en} department."), EventKind.MILESTONE)
         }
         val before = d.level
         d.level += count
@@ -331,7 +372,7 @@ class GameEngine(val state: GameState) {
             gainReputation(REP_MILESTONE * ms.size)
             event(
                 L("${def.name.es} llega a ${ms.last()} clientes: los expedientes van el doble de rápido (+${REP_MILESTONE * ms.size} de reputación).", "${def.name.en} reached ${ms.last()} clients: files are processed twice as fast (+${REP_MILESTONE * ms.size} reputation)."),
-                EventKind.GOOD,
+                EventKind.MILESTONE,
             )
         }
         return true
@@ -440,7 +481,7 @@ class GameEngine(val state: GameState) {
         event(
             L("¡Mudanza! La gestoría se traslada a: ${next.name.es} (${next.city}). Ahora tienes ${next.floors} plantas y ${next.desksPerFloor} puestos por planta.",
                 "Moving day! The practice moves to: ${next.name.en} (${next.city}). You now have ${next.floors} floors and ${next.desksPerFloor} desks per floor."),
-            EventKind.GOOD,
+            EventKind.MILESTONE,
         )
         return true
     }
@@ -451,33 +492,126 @@ class GameEngine(val state: GameState) {
     }
 
     /**
-     * El jugador responde una consulta. [option] es el índice de la opción en la plantilla
-     * (0 = correcta). Si acierta, factura los honorarios y gana reputación; si falla, la
-     * rectificación es gratuita y pierde reputación.
+     * El jugador responde una consulta de opción múltiple. [option] es el índice de la opción en
+     * la plantilla (0 = correcta). Si acierta, factura los honorarios y gana reputación; si falla,
+     * la rectificación es gratuita y pierde reputación.
      */
     fun answerCase(caseId: Int, option: Int): CaseResult? {
         val pc = state.cases.firstOrNull { it.id == caseId } ?: return null
-        val t = pc.template
-        val correct = option == 0
+        val t = pc.quiz ?: return null
+        return resolveCase(pc, option == 0).copy(quiz = t)
+    }
+
+    /** El jugador entrega el asiento de una consulta: [accounts] es la cuenta elegida para cada línea. */
+    fun answerEntry(caseId: Int, accounts: List<String>): CaseResult? {
+        val pc = state.cases.firstOrNull { it.id == caseId } ?: return null
+        val t = pc.entry ?: return null
+        val lines = t.build(pc.base)
+        if (accounts.size != lines.size) return null
+        val correct = lines.indices.all { accounts[it] == lines[it].account }
+        return resolveCase(pc, correct).copy(entry = t, lines = lines, given = accounts)
+    }
+
+    /** Líneas (importes y lados) del asiento que pide la consulta. */
+    fun entryLines(pc: PendingCase): List<EntryLine> = pc.entry?.build(pc.base) ?: emptyList()
+
+    /** Cuentas candidatas de una consulta de asiento, en el orden barajado. */
+    fun entryCandidates(pc: PendingCase): List<String> {
+        val t = pc.entry ?: return emptyList()
+        return pc.order.map { t.candidates[it] }
+    }
+
+    private fun resolveCase(pc: PendingCase, correct: Boolean): CaseResult {
         state.cases.remove(pc)
-        val repChange: Long
-        val fee: Long
-        if (correct) {
-            fee = pc.fee
-            invoiceCase(t, fee)
+        val info = pc.info
+        return if (correct) {
+            invoiceCase(info, pc.fee)
             state.streak++
             state.bestStreak = max(state.bestStreak, state.streak)
             state.casesCorrect++
-            repChange = 3L + pc.tier
-            gainReputation(repChange)
+            var rep = 3L + pc.tier + (if (pc.isEntry) 2L else 0L)
+            if (pc.vip) rep *= 2
+            gainReputation(rep)
+            CaseResult(true, info, pc.fee, rep, state.streak, pc.vip)
         } else {
-            fee = 0
             state.streak = 0
             state.casesWrong++
-            repChange = -min(REP_WRONG, state.reputation)
-            state.reputation += repChange
+            val rep = -min(REP_WRONG, state.reputation)
+            state.reputation += rep
+            CaseResult(false, info, 0, rep, 0, pc.vip)
         }
-        return CaseResult(correct, t, fee, repChange, state.streak)
+    }
+
+    /** Llama al servicio técnico: reparación de los ordenadores (622) con IVA. */
+    fun repair(incidentId: Int): Boolean {
+        val i = state.incidents.firstOrNull { it.id == incidentId && it.kind == IncidentKind.BREAKDOWN } ?: return false
+        if (cash() < withVat(i.cost)) return false
+        val def = Departments.get(i.dept ?: return false)
+        post(
+            L("Reparación de los ordenadores · ${def.name.es}", "Computer repair · ${def.name.en}"),
+            EntryBuilder().debit("622", i.cost).debit("472", Money.pct(i.cost, Vat.GENERAL)).credit("572", withVat(i.cost)),
+        )
+        state.incidents.remove(i)
+        event(L("El servicio técnico ha reparado los ordenadores de ${def.name.es}.", "The technician fixed the computers in ${def.name.en}."), EventKind.GOOD)
+        return true
+    }
+
+    /** Acepta la invitación a la jornada: inscripción en relaciones públicas (627) con IVA y reputación. */
+    fun acceptInvitation(incidentId: Int): Boolean {
+        val i = state.incidents.firstOrNull { it.id == incidentId && it.kind == IncidentKind.NETWORKING } ?: return false
+        if (cash() < withVat(i.cost)) return false
+        post(
+            L("Inscripción en la jornada de networking de la Cámara de Comercio", "Chamber of Commerce networking event fee"),
+            EntryBuilder().debit("627", i.cost).debit("472", Money.pct(i.cost, Vat.GENERAL)).credit("572", withVat(i.cost)),
+        )
+        state.incidents.remove(i)
+        gainReputation(i.reward)
+        event(L("Has ido a la jornada de networking: +${i.reward} de reputación.", "You attended the networking event: +${i.reward} reputation."), EventKind.GOOD)
+        return true
+    }
+
+    fun declineInvitation(incidentId: Int): Boolean =
+        state.incidents.removeAll { it.id == incidentId && it.kind == IncidentKind.NETWORKING }
+
+    fun canAfford(costWithoutVat: Long): Boolean = cash() >= withVat(costWithoutVat)
+
+    // ───────────────────────────── Prestigio ─────────────────────────────
+
+    /** Puntos de experiencia que daría traspasar ahora la gestoría: raíz cuadrada de los honorarios en millones. */
+    fun prestigePoints(): Int = floor(sqrt(state.lifetimeSales / 100_000_000.0)).toInt()
+
+    /** Valor de venta de las participaciones: el patrimonio neto de la sociedad. */
+    fun saleValue(): Long = max(0L, Reports.balanceSheet(ledger).equity)
+
+    fun canPrestige(): Boolean = state.officeIndex >= PRESTIGE_MIN_OFFICE && prestigePoints() >= 1
+
+    fun prestigePreview(): PrestigePreview {
+        val points = prestigePoints()
+        val after = state.experience + points
+        return PrestigePreview(points, saleValue(), after, experienceMultiplier(), 1.0 + EXPERIENCE_STEP * after)
+    }
+
+    /**
+     * Vende las participaciones de la gestoría y funda una nueva sociedad, que empieza de cero
+     * el 1 de enero siguiente con los puntos de experiencia acumulados. Devuelve el motor nuevo.
+     */
+    fun prestige(newCompanyName: String): GameEngine? {
+        if (!canPrestige()) return null
+        val pv = prestigePreview()
+        val ng = newGame(date().year + 1, nextLong(), newCompanyName)
+        val ns = ng.state
+        ns.experience = pv.experienceAfter
+        ns.prestigeCount = state.prestigeCount + 1
+        ns.ownerWealth = Money.add(state.ownerWealth, pv.saleValue)
+        ns.boostUntil = max(0.0, state.boostUntil - state.playSeconds)
+        ng.event(
+            L(
+                "Has vendido ${state.companyName} por ${fmt(pv.saleValue, Lang.ES)} y fundas $newCompanyName con ${pv.experienceAfter} puntos de experiencia: honorarios +${pv.experienceAfter * 10} %.",
+                "You sold ${state.companyName} for ${fmt(pv.saleValue, Lang.EN)} and founded $newCompanyName with ${pv.experienceAfter} experience points: fees +${pv.experienceAfter * 10}%.",
+            ),
+            EventKind.MILESTONE,
+        )
+        return ng
     }
 
     /** Pago anticipado por el jugador desde la pantalla de Hacienda. */
@@ -616,6 +750,7 @@ class GameEngine(val state: GameState) {
         processFlows()
         processObligations()
         processCases()
+        processIncidents()
 
         state.salesLast30[Math.floorMod(state.day, 30L).toInt()] = state.todaySales
         state.todaySales = 0
@@ -648,6 +783,91 @@ class GameEngine(val state: GameState) {
             pruneHistory()
         }
         state.day++
+        announceSeasons()
+    }
+
+    /** Avisa del principio y del final de las temporadas de los departamentos abiertos. */
+    private fun announceSeasons() {
+        val today = date()
+        val yesterday = today.plusDays(-1)
+        for (season in Seasons.all) {
+            if (!deptOpen(season.dept)) continue
+            if (season.startsOn(today)) {
+                event(L("${season.emoji} Empieza: ${season.name.es}. ${season.description.es}", "${season.emoji} Starting: ${season.name.en}. ${season.description.en}"), EventKind.INFO)
+            } else if (season.endsOn(yesterday)) {
+                event(L("${season.emoji} Termina: ${season.name.es}.", "${season.emoji} Over: ${season.name.en}."), EventKind.INFO)
+            }
+        }
+    }
+
+    private fun processIncidents() {
+        for (i in state.incidents.filter { state.day >= it.endDay }) {
+            state.incidents.remove(i)
+            val name = i.dept?.let { Departments.get(it).name }
+            when (i.kind) {
+                IncidentKind.BREAKDOWN -> event(
+                    L("El servicio técnico de la garantía ha reparado por fin los ordenadores de ${name?.es}.", "The warranty service has finally fixed the computers in ${name?.en}."),
+                    EventKind.INFO,
+                )
+                IncidentKind.FLU -> event(L("La plantilla de ${name?.es} se ha recuperado de la gripe.", "${name?.en} staff have recovered from the flu."), EventKind.INFO)
+                IncidentKind.NETWORKING -> Unit
+            }
+        }
+        if (state.day >= state.nextIncidentDay) {
+            rollIncident()
+            state.nextIncidentDay = state.day + 12 + nextInt(19)
+        }
+    }
+
+    /** Sortea un imprevisto entre los posibles en este momento de la partida. */
+    private fun rollIncident() {
+        val withStaff = Departments.all.filter { dept(it.id).workers > 0 && state.incidents.none { i -> i.dept == it.id } }
+        val options = mutableListOf<Pair<String, Int>>()
+        if (state.cases.none { it.vip }) options.add("vip" to 35)
+        if (withStaff.isNotEmpty()) options.add("breakdown" to 25)
+        if (withStaff.any { dept(it.id).workers >= 2 }) options.add("flu" to 15)
+        if (state.incidents.none { it.kind == IncidentKind.NETWORKING }) options.add("networking" to 25)
+        if (options.isEmpty()) return
+        var r = nextInt(options.sumOf { it.second })
+        val kind = options.first { (_, w) -> (r < w).also { r -= w } }.first
+        val day = state.day
+        when (kind) {
+            "vip" -> pickCaseTemplate()?.let { t ->
+                addCase(t, vip = true)
+                event(
+                    L("⭐ Cliente VIP: ${t.client.es} necesita respuesta en $VIP_DAYS días y paga el triple.", "⭐ VIP client: ${t.client.en} needs an answer within $VIP_DAYS days and pays triple."),
+                    EventKind.GOOD,
+                )
+            }
+            "breakdown" -> {
+                val def = withStaff[nextInt(withStaff.size)]
+                val cost = Money.euros(max(150L, dept(def.id).equipmentGross * 15 / 100 / 100))
+                state.incidents.add(Incident(state.nextIncidentId++, IncidentKind.BREAKDOWN, def.id, day, day + 4, cost, 0))
+                event(
+                    L("💥 Avería informática en ${def.name.es}: factura la mitad hasta que se repare.", "💥 Computer failure in ${def.name.en}: it bills half until repaired."),
+                    EventKind.WARNING,
+                )
+            }
+            "flu" -> {
+                val candidates = withStaff.filter { dept(it.id).workers >= 2 }
+                val def = candidates[nextInt(candidates.size)]
+                state.incidents.add(Incident(state.nextIncidentId++, IncidentKind.FLU, def.id, day, day + 5, 0, 0))
+                event(
+                    L("🤧 Gripe en ${def.name.es}: hay bajas y el departamento factura un 25 % menos durante 5 días.", "🤧 Flu in ${def.name.en}: some staff are off sick and it bills 25% less for 5 days."),
+                    EventKind.WARNING,
+                )
+            }
+            else -> {
+                val twoDays = (incomePerSecond() * DAY_SECONDS * 2 / 100).toLong()
+                val cost = Money.euros(max(150L, twoDays))
+                val reward = 8L + 4L * tier().index
+                state.incidents.add(Incident(state.nextIncidentId++, IncidentKind.NETWORKING, null, day, day + 5, cost, reward))
+                event(
+                    L("🤝 Te invitan a una jornada de networking de la Cámara de Comercio (+$reward de reputación si vas).", "🤝 You're invited to a Chamber of Commerce networking event (+$reward reputation if you go)."),
+                    EventKind.INFO,
+                )
+            }
+        }
     }
 
     /** Asiento resumen diario de honorarios por departamento (art. 28.2 del Código de Comercio). */
@@ -674,7 +894,7 @@ class GameEngine(val state: GameState) {
         }
     }
 
-    private fun invoiceCase(t: CaseTemplate, fee: Long) {
+    private fun invoiceCase(t: ClientCase, fee: Long) {
         if (fee <= 0) return
         val vat = Money.pct(fee, Vat.GENERAL)
         post(
@@ -754,22 +974,36 @@ class GameEngine(val state: GameState) {
     }
 
     private fun processCases() {
-        for (pc in state.cases.filter { state.day - it.arrivalDay >= CASE_AUTO_DAYS }) {
+        for (pc in state.cases.filter { it.vip && state.day - it.arrivalDay >= VIP_DAYS }) {
+            state.cases.remove(pc)
+            state.vipLost++
+            val loss = min(REP_VIP_LOST, state.reputation)
+            state.reputation -= loss
+            event(
+                L("El cliente VIP ${pc.info.client.es} se ha ido a otra gestoría por no recibir respuesta (−$loss de reputación).", "VIP client ${pc.info.client.en} went to another practice after getting no answer (−$loss reputation)."),
+                EventKind.WARNING,
+            )
+        }
+        for (pc in state.cases.filter { !it.vip && state.day - it.arrivalDay >= CASE_AUTO_DAYS }) {
             state.cases.remove(pc)
             val fee = pc.fee / 2
-            invoiceCase(pc.template, fee)
+            invoiceCase(pc.info, fee)
             state.casesAuto++
             gainReputation(REP_AUTO)
         }
         if (state.day >= state.nextCaseDay) {
-            if (state.cases.size < MAX_CASES) pickCaseTemplate()?.let { addCase(it) }
+            if (state.cases.count { !it.vip } < MAX_CASES) pickCaseTemplate()?.let { addCase(it) }
             state.nextCaseDay = state.day + CASE_INTERVAL_DAYS
         }
     }
 
-    private fun pickCaseTemplate(): CaseTemplate? {
+    /** Elige una consulta nueva: de asiento con probabilidad [ENTRY_CHANCE], si hay alguna disponible. */
+    private fun pickCaseTemplate(): ClientCase? {
         val tierIndex = tier().index
-        val open = Cases.all.filter { deptOpen(it.dept) && it.minTier <= tierIndex }
+        val quizzes = Cases.all.filter { deptOpen(it.dept) && it.minTier <= tierIndex }
+        val entries = EntryCases.all.filter { deptOpen(it.dept) && it.minTier <= tierIndex }
+        val useEntry = entries.isNotEmpty() && (quizzes.isEmpty() || nextDouble() < ENTRY_CHANCE)
+        val open: List<ClientCase> = if (useEntry) entries else quizzes
         if (open.isEmpty()) return null
         val pending = state.cases.map { it.templateId }.toSet()
         val fresh = open.filter { it.id !in state.recentCases && it.id !in pending }
@@ -783,12 +1017,17 @@ class GameEngine(val state: GameState) {
         return candidates.last()
     }
 
-    private fun addCase(t: CaseTemplate) {
+    private fun addCase(t: ClientCase, vip: Boolean = false) {
         val tr = tier()
         val variation = 0.8 + nextDouble() * 0.4
         val scaled = (incomePerSecond() * CASE_FEE_SECONDS * variation).toLong()
-        val fee = max(Money.times(tr.caseMinFee, variation), scaled)
-        state.cases.add(PendingCase(state.nextCaseId++, t.id, state.day, fee, tr.index, shuffled(listOf(0, 1, 2, 3))))
+        var fee = max(Money.times(tr.caseMinFee, variation), scaled)
+        val entry = t as? EntryCaseTemplate
+        if (entry != null) fee = Money.times(fee, ENTRY_FEE)
+        if (vip) fee = Money.times(fee, VIP_FEE)
+        val order = if (entry != null) shuffled(entry.candidates.indices.toList()) else shuffled(listOf(0, 1, 2, 3))
+        val base = entry?.pickBase(nextDouble()) ?: 0L
+        state.cases.add(PendingCase(state.nextCaseId++, t.id, state.day, fee, tr.index, order, base, vip))
         state.recentCases.addLast(t.id)
         while (state.recentCases.size > 8) state.recentCases.removeFirst()
     }
@@ -801,10 +1040,10 @@ class GameEngine(val state: GameState) {
             state.bestTier = t.index
             event(
                 L(
-                    "¡Tu reputación crece! Ahora llegan clientes del tipo «${t.name.es}»: los honorarios se multiplican por ${t.feeMultiplier.toInt()}.",
-                    "Your reputation grows! Clients of type \"${t.name.en}\" now come to you: fees are multiplied by ${t.feeMultiplier.toInt()}.",
+                    "¡Tu reputación crece! Ahora llegan clientes del tipo «${t.name.es}»: los honorarios se multiplican por ${Fmt.decimal2(t.feeMultiplier, Lang.ES)}.",
+                    "Your reputation grows! Clients of type \"${t.name.en}\" now come to you: fees are multiplied by ${Fmt.decimal2(t.feeMultiplier, Lang.EN)}.",
                 ),
-                EventKind.GOOD,
+                EventKind.MILESTONE,
             )
         }
     }

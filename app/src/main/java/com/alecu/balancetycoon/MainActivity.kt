@@ -30,13 +30,16 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Solo en la versión de pruebas: «tab» abre una pestaña y «demo_minutes» prepara una partida
-     * avanzada con el jugador automático. Se usan para las capturas automáticas de GitHub Actions.
+     * Solo en la versión de pruebas: «tab» abre una pestaña, «night» fuerza el día (0) o la noche (1)
+     * y «demo_minutes» prepara una partida avanzada con el jugador automático. Se usan para las
+     * capturas automáticas de GitHub Actions.
      */
     private fun handleDebugExtras(intent: Intent?) {
         if (intent == null || (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0) return
         val tab = intent.getIntExtra("tab", -1)
         if (tab >= 0) vm.tab = tab
+        val night = intent.getFloatExtra("night", -1f)
+        if (night >= 0f) vm.nightOverride = night
         val demo = intent.getIntExtra("demo_minutes", 0)
         if (demo > 0) vm.requestDemo(demo)
     }

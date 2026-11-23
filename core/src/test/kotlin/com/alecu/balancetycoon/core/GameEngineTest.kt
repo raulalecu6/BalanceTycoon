@@ -6,6 +6,12 @@ import com.alecu.balancetycoon.core.accounting.Reports
 import com.alecu.balancetycoon.core.calendar.GameDate
 import com.alecu.balancetycoon.core.game.AutoPlayer
 import com.alecu.balancetycoon.core.game.Cases
+import com.alecu.balancetycoon.core.game.EntryCases
+import com.alecu.balancetycoon.core.game.Incident
+import com.alecu.balancetycoon.core.game.IncidentKind
+import com.alecu.balancetycoon.core.game.PendingCase
+import com.alecu.balancetycoon.core.i18n.Lang
+import com.alecu.balancetycoon.core.save.Json
 import com.alecu.balancetycoon.core.game.ClientTiers
 import com.alecu.balancetycoon.core.game.Departments
 import com.alecu.balancetycoon.core.game.EquipmentTiers
@@ -69,6 +75,137 @@ class GameEngineTest {
     }
 
     @Test
+    fun catalogoDeAsientosCoherente() {
+        val ids = EntryCases.all.map { it.id } + Cases.all.map { it.id }
+        assertEquals("Identificadores repetidos", ids.size, ids.toSet().size)
+        for (t in EntryCases.all) {
+            Departments.get(t.dept)
+            assertTrue(t.minTier in ClientTiers.all.indices)
+            for (c in t.candidates) assertTrue("Cuenta ${c} de ${t.id} fuera del plan", Pgc.exists(c))
+            for (base in listOf(t.pickBase(0.0), t.pickBase(0.5), t.pickBase(0.9999))) {
+                val lines = t.build(base)
+                assertTrue("Importe no positivo en ${t.id}", lines.all { it.amount > 0 })
+                assertEquals("${t.id} no cuadra", lines.filter { it.debit }.sumOf { it.amount }, lines.filter { !it.debit }.sumOf { it.amount })
+                for (lang in Lang.values()) assertFalse("Marcador sin sustituir en ${t.id}", t.statementText(base, lang).contains("{L"))
+            }
+        }
+        // Hay consultas de asiento desde el principio de la partida.
+        assertTrue(EntryCases.all.any { it.minTier == 0 && it.dept == "fiscal" })
+    }
+
+    @Test
+    fun consultaDeAsiento() {
+        val e = GameEngine.newGame(2026)
+        val t = EntryCases.get("ef_venta_credito")
+        val base = t.pickBase(0.3)
+        e.state.cases.add(PendingCase(900, t.id, e.state.day, Money.euros(50L), 0, t.candidates.indices.reversed().toList(), base))
+        val pc = e.state.cases.last()
+        val lines = e.entryLines(pc)
+        assertEquals(listOf("430", "700", "477"), lines.map { it.account })
+        assertEquals(base, lines[1].amount)
+        assertEquals(Money.pct(base, 2100), lines[2].amount)
+        assertEquals(base + Money.pct(base, 2100), lines[0].amount)
+        assertEquals(t.candidates.reversed(), e.entryCandidates(pc))
+
+        val wrong = e.answerEntry(pc.id, listOf("572", "700", "477"))!!
+        assertFalse(wrong.correct)
+        assertEquals(listOf("572", "700", "477"), wrong.given)
+
+        e.state.cases.add(PendingCase(901, t.id, e.state.day, Money.euros(50L), 0, t.candidates.indices.toList(), base))
+        val before = e.state.ledger.natural("705")
+        val ok = e.answerEntry(901, listOf("430", "700", "477"))!!
+        assertTrue(ok.correct)
+        assertEquals(5L, ok.reputationChange)
+        assertEquals(Money.euros(50L), e.state.ledger.natural("705") - before)
+        assertBooksBalance(e, "asiento")
+    }
+
+    @Test
+    fun clienteVipSeVaSiNoSeLeResponde() {
+        val e = GameEngine.newGame(2026)
+        e.state.nextIncidentDay = Long.MAX_VALUE
+        e.state.reputation = 10
+        e.state.cases.add(PendingCase(900, "f_pan", e.state.day, Money.euros(300L), 0, listOf(0, 1, 2, 3), vip = true))
+        e.advance(GameEngine.DAY_SECONDS * (GameEngine.VIP_DAYS + 1))
+        assertTrue(e.state.cases.none { it.id == 900 })
+        assertEquals(1, e.state.vipLost)
+        assertEquals(8L, e.state.reputation)
+
+        e.state.cases.add(PendingCase(901, "f_pan", e.state.day, Money.euros(300L), 0, listOf(0, 1, 2, 3), vip = true))
+        val r = e.answerCase(901, 0)!!
+        assertTrue(r.vip)
+        assertEquals(6L, r.reputationChange) // el doble de 3
+    }
+
+    @Test
+    fun temporadasDelCalendario() {
+        val e = GameEngine.newGame(2026)
+        e.state.day = GameDate.of(2026, 4, 15).epochDay
+        assertEquals(2.0, e.eventMultiplier("fiscal"), 1e-9)
+        assertEquals(1.0, e.eventMultiplier("laboral"), 1e-9)
+        val april = e.revenuePerCycle("fiscal")
+        e.state.day = GameDate.of(2026, 3, 15).epochDay
+        assertEquals(1.0, e.eventMultiplier("fiscal"), 1e-9)
+        assertEquals(1.5, e.eventMultiplier("contable"), 1e-9)
+        assertEquals(april, e.revenuePerCycle("fiscal") * 2)
+        e.state.day = GameDate.of(2026, 9, 20).epochDay
+        assertEquals(1.5, e.eventMultiplier("laboral"), 1e-9)
+        // El aviso de inicio solo sale para departamentos abiertos.
+        e.state.day = GameDate.of(2026, 3, 31).epochDay
+        val seq = e.state.eventSeq
+        e.advance(GameEngine.DAY_SECONDS)
+        assertTrue(e.state.events.any { it.seq > seq && it.text.es.contains("renta") })
+    }
+
+    @Test
+    fun averiaYJornadaDeNetworking() {
+        val e = GameEngine.newGame(2026)
+        e.state.nextIncidentDay = Long.MAX_VALUE
+        injectCash(e, 5_000L)
+        e.hire("fiscal")
+        val normal = e.revenuePerCycle("fiscal")
+        e.state.incidents.add(Incident(1, IncidentKind.BREAKDOWN, "fiscal", e.state.day, e.state.day + 4, Money.euros(150L), 0))
+        assertEquals(0.5, e.eventMultiplier("fiscal"), 1e-9)
+        assertTrue(e.revenuePerCycle("fiscal") < normal)
+        assertTrue(e.repair(1))
+        assertEquals(Money.euros(150L), e.state.ledger.natural("622"))
+        assertTrue(e.state.incidents.isEmpty())
+
+        val rep = e.state.reputation
+        e.state.incidents.add(Incident(2, IncidentKind.NETWORKING, null, e.state.day, e.state.day + 5, Money.euros(200L), 12))
+        assertTrue(e.acceptInvitation(2))
+        assertEquals(rep + 12, e.state.reputation)
+        assertEquals(Money.euros(200L), e.state.ledger.natural("627") - Money.euros(600L))
+
+        // Una gripe se pasa sola.
+        e.state.incidents.add(Incident(3, IncidentKind.FLU, "fiscal", e.state.day, e.state.day + 2, 0, 0))
+        e.advance(GameEngine.DAY_SECONDS * 3)
+        assertTrue(e.state.incidents.isEmpty())
+        assertBooksBalance(e, "imprevistos")
+    }
+
+    @Test
+    fun prestigioFundaUnaGestoriaNuevaConExperiencia() {
+        val e = GameEngine.newGame(2026)
+        e.state.lifetimeSales = Money.euros(900_000_000L) // 900 M€ → 30 puntos
+        assertFalse("Hace falta llegar a Ciudad Real", e.canPrestige())
+        e.state.officeIndex = 2
+        assertTrue(e.canPrestige())
+        val pv = e.prestigePreview()
+        assertEquals(30, pv.points)
+        val ng = e.prestige("Segunda Gestoría, S.L.")!!
+        val ns = ng.state
+        assertEquals(30, ns.experience)
+        assertEquals(1, ns.prestigeCount)
+        assertEquals(2027, ng.date().year)
+        assertEquals(pv.saleValue, ns.ownerWealth)
+        assertEquals(4.0, ng.experienceMultiplier(), 1e-9)
+        assertEquals(Money.times(Departments.get("fiscal").feePerCycle, 4.0), ng.revenuePerCycle("fiscal"))
+        assertEquals("Segunda Gestoría, S.L.", ns.companyName)
+        assertBooksBalance(ng, "gestoría nueva")
+    }
+
+    @Test
     fun partidaNuevaArrancaCuadrada() {
         val e = GameEngine.newGame(2026)
         assertEquals(1, e.dept("fiscal").level)
@@ -100,6 +237,13 @@ class GameEngineTest {
         assertBooksBalance(e, "tras el primer expediente")
     }
 
+    /** Responde bien cualquier consulta, sea de opción múltiple o de asiento. */
+    private fun answerRight(e: GameEngine, pc: PendingCase) =
+        if (pc.isEntry) e.answerEntry(pc.id, e.entryLines(pc).map { it.account }) else e.answerCase(pc.id, 0)
+
+    private fun answerWrong(e: GameEngine, pc: PendingCase) =
+        if (pc.isEntry) e.answerEntry(pc.id, e.entryLines(pc).map { it.account }.reversed()) else e.answerCase(pc.id, 2)
+
     @Test
     fun consultaBienResueltaFacturaYDaReputacion() {
         val e = GameEngine.newGame(2026)
@@ -107,16 +251,17 @@ class GameEngineTest {
         val pc = e.state.cases.firstOrNull()
         assertNotNull("Debe haber llegado una consulta", pc)
         val before = e.state.ledger.natural("705")
-        val r = e.answerCase(pc!!.id, 0)!!
+        val r = answerRight(e, pc!!)!!
         assertTrue(r.correct)
         assertEquals(pc.fee, e.state.ledger.natural("705") - before)
-        assertEquals(3L, e.state.reputation)
+        assertEquals(if (pc.isEntry) 5L else 3L, e.state.reputation)
         assertEquals(1, e.state.streak)
         assertTrue(e.state.cases.none { it.id == pc.id })
+        e.state.reputation = 3L
 
         e.advance(GameEngine.DAY_SECONDS * 2)
         val wrong = e.state.cases.first()
-        val r2 = e.answerCase(wrong.id, 2)!!
+        val r2 = answerWrong(e, wrong)!!
         assertFalse(r2.correct)
         assertEquals(0L, r2.fee)
         assertEquals(0L, e.state.reputation)
@@ -127,6 +272,7 @@ class GameEngineTest {
     @Test
     fun consultasSinAtenderLasResuelveElEquipoAMitadDePrecio() {
         val e = GameEngine.newGame(2026)
+        e.state.nextIncidentDay = Long.MAX_VALUE // sin imprevistos en este test
         e.advance(GameEngine.DAY_SECONDS * 30)
         assertTrue(e.state.casesAuto > 0)
         assertEquals(e.state.casesAuto.toLong(), e.state.reputation)
@@ -272,6 +418,20 @@ class GameEngineTest {
         restored.advance(GameEngine.DAY_SECONDS * 120)
         assertEquals(SaveCodec.encode(e.state), SaveCodec.encode(restored.state))
         assertBooksBalance(restored, "tras cargar")
+    }
+
+    @Test
+    fun partidaDeLaVersion2SeCargaSinLosDatosNuevos() {
+        val e = GameEngine.newGame(2026, seed = 7L)
+        e.advance(GameEngine.DAY_SECONDS * 5)
+        @Suppress("UNCHECKED_CAST")
+        val m = Json.parse(SaveCodec.encode(e.state)) as MutableMap<String, Any?>
+        m["v"] = 2L
+        for (k in listOf("incidents", "nextIncidentId", "nextIncidentDay", "experience", "prestigeCount")) m.remove(k)
+        val restored = SaveCodec.decode(Json.write(m))
+        assertEquals(0, restored.experience)
+        assertTrue(restored.incidents.isEmpty())
+        assertEquals(e.state.cases.size, restored.cases.size)
     }
 
     @Test(expected = IncompatibleSaveException::class)

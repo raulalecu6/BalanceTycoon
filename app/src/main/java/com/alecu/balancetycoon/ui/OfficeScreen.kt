@@ -15,7 +15,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.alecu.balancetycoon.core.calendar.GameDate
+import com.alecu.balancetycoon.core.format.Fmt
+import com.alecu.balancetycoon.core.game.Incident
+import com.alecu.balancetycoon.core.game.IncidentKind
+import com.alecu.balancetycoon.core.game.Season
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -46,10 +59,12 @@ fun OfficeScreen(vm: GameViewModel, engine: GameEngine, lang: Lang, tick: Long) 
             lang = lang,
             tick = tick,
             modifier = Modifier.fillMaxWidth().weight(0.56f),
+            nightOverride = vm.nightOverride,
+            onManualCoin = { vm.playCoin() },
             onFloorTap = { id ->
                 if (engine.dept(id).level == 0) vm.buy(id) else vm.tap(id)
             },
-            onLobbyTap = { vm.tab = 3 },
+            onLobbyTap = { vm.selectTab(3) },
         )
         DeptPanel(vm, engine, lang, tick, Modifier.fillMaxWidth().weight(0.44f))
     }
@@ -59,6 +74,7 @@ fun OfficeScreen(vm: GameViewModel, engine: GameEngine, lang: Lang, tick: Long) 
 private fun DeptPanel(vm: GameViewModel, engine: GameEngine, lang: Lang, tick: Long, modifier: Modifier) {
     val office = engine.office()
     val visible = Departments.all.take(office.floors)
+    var openNotice by remember { mutableStateOf<Notice?>(null) }
     Column(
         modifier
             .background(Palette.PanelDark)
@@ -66,6 +82,20 @@ private fun DeptPanel(vm: GameViewModel, engine: GameEngine, lang: Lang, tick: L
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        val notices = notices(engine, lang)
+        if (notices.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (n in notices) {
+                    GameButton(
+                        onClick = { if (n is Notice.Vip) vm.selectTab(3) else openNotice = n },
+                        color = n.color,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        PixelText(n.chip(lang), size = 12.sp, color = Palette.Stroke)
+                    }
+                }
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (mode in BuyMode.values()) {
                 val label = when (mode) {
@@ -121,6 +151,122 @@ private fun DeptPanel(vm: GameViewModel, engine: GameEngine, lang: Lang, tick: L
             }
         }
     }
+    openNotice?.let { n -> NoticeDialog(n, vm, engine, lang) { openNotice = null } }
+}
+
+@Composable
+private fun NoticeDialog(n: Notice, vm: GameViewModel, engine: GameEngine, lang: Lang, onClose: () -> Unit) {
+    val date = { day: Long -> Fmt.dateLong(GameDate(day), lang) }
+    var actions: (@Composable () -> Unit)? = null
+    val title: String
+    val body: String
+    when (n) {
+        is Notice.SeasonNotice -> {
+            val s = n.season
+            title = "${s.emoji} ${s.name.get(lang)}"
+            body = s.description.get(lang) + "\n\n" + stringResource(
+                R.string.season_dates,
+                Fmt.dateLong(GameDate.of(engine.date().year, s.fromMonth, s.fromDay), lang),
+                Fmt.dateLong(GameDate.of(engine.date().year, s.toMonth, s.toDay), lang),
+            )
+        }
+        is Notice.IncidentNotice -> {
+            val i = n.incident
+            val dept = i.dept?.let { Departments.get(it).name.get(lang) } ?: ""
+            val cost = money(i.cost, lang)
+            val withVat = moneyShort(i.cost + com.alecu.balancetycoon.core.money.Money.pct(i.cost, 2100), lang)
+            when (i.kind) {
+                IncidentKind.BREAKDOWN -> {
+                    title = stringResource(R.string.breakdown_title, dept)
+                    body = stringResource(R.string.breakdown_body, dept, date(i.endDay), cost)
+                    actions = {
+                        PriceButton(
+                            stringResource(R.string.breakdown_repair), withVat,
+                            onClick = { vm.repair(i.id); onClose() },
+                            enabled = engine.canAfford(i.cost), modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                IncidentKind.FLU -> {
+                    title = stringResource(R.string.flu_title, dept)
+                    body = stringResource(R.string.flu_body, dept, date(i.endDay))
+                }
+                IncidentKind.NETWORKING -> {
+                    title = stringResource(R.string.networking_title)
+                    body = stringResource(R.string.networking_body, cost, i.reward.toInt(), date(i.endDay))
+                    actions = {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            PriceButton(
+                                stringResource(R.string.networking_go), withVat,
+                                onClick = { vm.acceptInvitation(i.id); onClose() },
+                                enabled = engine.canAfford(i.cost), modifier = Modifier.fillMaxWidth(),
+                            )
+                            PriceButton(
+                                stringResource(R.string.networking_skip), null,
+                                onClick = { vm.declineInvitation(i.id); onClose() },
+                                color = Palette.PanelLight, modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        is Notice.Vip -> {
+            title = n.chip(lang)
+            body = ""
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = Palette.Panel,
+        title = { PixelText(title, size = 18.sp, color = Palette.Gold, maxLines = 2) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(body, color = Palette.Cream)
+                actions?.invoke()
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
+    )
+}
+
+/** Aviso que se muestra como chip encima del panel: temporada, imprevisto o cliente VIP. */
+sealed class Notice {
+    abstract val color: Color
+    abstract fun chip(lang: Lang): String
+
+    data class SeasonNotice(val season: Season) : Notice() {
+        override val color = Palette.Gold
+        override fun chip(lang: Lang) = "${season.emoji} ${season.name.get(lang)} ×" +
+            Fmt.decimal2(season.multiplier, lang).trimEnd('0').trimEnd(',', '.')
+    }
+
+    data class IncidentNotice(val incident: Incident) : Notice() {
+        override val color = when (incident.kind) {
+            IncidentKind.BREAKDOWN -> Palette.Red
+            IncidentKind.FLU -> Color(0xFFB9A3E0)
+            IncidentKind.NETWORKING -> Palette.Mint
+        }
+        override fun chip(lang: Lang): String {
+            val dept = incident.dept?.let { Departments.get(it).name.get(lang) } ?: ""
+            return when (incident.kind) {
+                IncidentKind.BREAKDOWN -> if (lang == Lang.ES) "💥 Avería · $dept" else "💥 Failure · $dept"
+                IncidentKind.FLU -> if (lang == Lang.ES) "🤧 Gripe · $dept" else "🤧 Flu · $dept"
+                IncidentKind.NETWORKING -> if (lang == Lang.ES) "🤝 Invitación" else "🤝 Invitation"
+            }
+        }
+    }
+
+    data class Vip(val client: String) : Notice() {
+        override val color = Color(0xFFD8C4EC)
+        override fun chip(lang: Lang) = "⭐ VIP · $client"
+    }
+}
+
+private fun notices(engine: GameEngine, lang: Lang): List<Notice> = buildList {
+    engine.state.cases.filter { it.vip }.forEach { add(Notice.Vip(it.info.client.get(lang).substringBefore(" ("))) }
+    engine.state.incidents.forEach { add(Notice.IncidentNotice(it)) }
+    engine.activeSeasons().filter { engine.deptOpen(it.dept) }.forEach { add(Notice.SeasonNotice(it)) }
 }
 
 @Composable

@@ -18,7 +18,26 @@ class AutoPlayer(private val engine: GameEngine, private val accuracy: Double = 
         for (def in Departments.all) engine.tapDept(def.id)
 
         if (answerCases) {
-            for (pc in s.cases.toList()) engine.answerCase(pc.id, if (next() < accuracy) 0 else 1)
+            for (pc in s.cases.toList()) {
+                val right = next() < accuracy
+                if (pc.isEntry) {
+                    val correct = engine.entryLines(pc).map { it.account }
+                    // Al fallar, confunde la primera cuenta con otra candidata.
+                    val answer = if (right) correct else listOf(engine.entryCandidates(pc).first { it != correct[0] }) + correct.drop(1)
+                    engine.answerEntry(pc.id, answer)
+                } else {
+                    engine.answerCase(pc.id, if (right) 0 else 1)
+                }
+            }
+        }
+        // Imprevistos: repara las averías y va a las jornadas si le sobra el dinero.
+        for (i in s.incidents.toList()) {
+            val spare = engine.cash() - reserve()
+            when (i.kind) {
+                IncidentKind.BREAKDOWN -> if (spare > i.cost * 3) engine.repair(i.id)
+                IncidentKind.NETWORKING -> if (spare > i.cost * 5) engine.acceptInvitation(i.id) else engine.declineInvitation(i.id)
+                IncidentKind.FLU -> Unit
+            }
         }
         if (distribute && s.pendingDistribution != null) engine.decideDistribution(0.5)
         if (!buy) return

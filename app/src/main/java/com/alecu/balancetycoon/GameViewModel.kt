@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.alecu.balancetycoon.core.game.AutoPlayer
 import com.alecu.balancetycoon.core.game.CaseResult
+import com.alecu.balancetycoon.core.game.EventKind
 import com.alecu.balancetycoon.core.game.GameEngine
 import com.alecu.balancetycoon.core.game.OfflineReport
 import com.alecu.balancetycoon.core.save.SaveCodec
@@ -29,6 +30,18 @@ import kotlin.math.max
 import kotlin.math.min
 
 enum class BuyMode { ONE, TEN, MAX }
+
+/** Número romano para nombrar las gestorías siguientes. */
+fun roman(n: Int): String {
+    val values = listOf(1000 to "M", 900 to "CM", 500 to "D", 400 to "CD", 100 to "C", 90 to "XC", 50 to "L", 40 to "XL", 10 to "X", 9 to "IX", 5 to "V", 4 to "IV", 1 to "I")
+    var rest = n
+    val sb = StringBuilder()
+    for ((v, r) in values) while (rest >= v) {
+        sb.append(r)
+        rest -= v
+    }
+    return sb.toString()
+}
 
 /**
  * Hace avanzar el motor unas diez veces por segundo mientras la app está visible,
@@ -56,8 +69,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     var tab: Int by mutableIntStateOf(0)
     /** La partida guardada era del prototipo anterior y se ha empezado una nueva. */
     var startedFresh: Boolean by mutableStateOf(false)
+    /** Cambia en cada hito para lanzar el confeti. */
+    var celebration: Int by mutableIntStateOf(0)
+        private set
+    /** Solo en la versión de pruebas: fuerza el día (0) o la noche (1) en la torre. */
+    var nightOverride: Float? by mutableStateOf(null)
 
     val ads: AdsProvider = SimulatedAdsProvider()
+    val audio = GameAudio(app)
+
+    /** Último suceso del motor cuyo sonido ya se ha tratado. */
+    private var soundSeq = 0L
 
     private var loopJob: Job? = null
     private var backgroundAtMillis = 0L
@@ -74,6 +96,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         startedFresh = result.discardedOldVersion
         val e = if (saved != null) GameEngine(saved) else newEngine()
         engine = e
+        soundSeq = e.state.eventSeq
         if (saved != null && saved.lastSavedMillis > 0) {
             catchUp(e, (System.currentTimeMillis() - saved.lastSavedMillis) / 1000.0)
         }
@@ -92,6 +115,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     // ───────────── Ciclo de vida ─────────────
 
     fun onForeground() {
+        audio.onForeground()
         val e = engine ?: return
         if (!loaded || backgroundAtMillis == 0L) return
         val elapsed = (System.currentTimeMillis() - backgroundAtMillis) / 1000.0
@@ -103,6 +127,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onBackground() {
+        audio.onBackground()
         if (!loaded) return
         loopJob?.cancel()
         loopJob = null
@@ -123,6 +148,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 val e = engine ?: continue
                 if (catchingUp) continue
                 e.advance(min(dt, 2.0))
+                reactToEvents(null)
                 bump()
                 sinceSave += dt
                 if (sinceSave >= 30.0) {
@@ -147,6 +173,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         val report = e.reportSince(snap, elapsedSeconds)
         if (report.days >= 1) offlineReport = report
+        soundSeq = e.state.eventSeq // lo ocurrido fuera no suena: se resume en el diálogo
         catchingUp = false
         bump()
     }
@@ -176,9 +203,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             t += 0.5
             if (++steps % 400 == 0) yield()
         }
-        // Deja un par de consultas sin responder para que se vean en la pantalla de clientes.
-        e.advance(GameEngine.DAY_SECONDS * 4)
+        // Deja consultas sin responder (al menos una de asiento, si llega) para que se vean en la
+        // pantalla de clientes.
+        var waited = 0
+        while (waited < 4 || (waited < 9 && e.state.cases.none { it.isEntry })) {
+            e.advance(GameEngine.DAY_SECONDS)
+            waited++
+        }
         engine = e
+        soundSeq = e.state.eventSeq
         offlineReport = null
         lastCase = null
         catchingUp = false
@@ -186,10 +219,48 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         bump()
     }
 
+    // ───────────── Sonido y celebraciones ─────────────
+
+    /**
+     * Suena según lo que acaba de pasar: un hito (o una mudanza) tiene prioridad sobre el
+     * sonido de la acción; sin acción, los avisos del motor suenan como alerta o campanilla.
+     */
+    private fun reactToEvents(actionSfx: Sfx?) {
+        val e = engine ?: return
+        val fresh = e.state.events.filter { it.seq > soundSeq }
+        soundSeq = e.state.eventSeq
+        val milestone = fresh.any { it.kind == EventKind.MILESTONE }
+        if (milestone) celebration++
+        val sfx = when {
+            milestone && actionSfx == Sfx.MOVE -> Sfx.MOVE
+            milestone -> Sfx.LEVEL_UP
+            actionSfx != null -> actionSfx
+            fresh.any { it.kind == EventKind.WARNING } -> Sfx.ALERT
+            fresh.any { it.kind == EventKind.GOOD || it.kind == EventKind.INFO } -> Sfx.CHIME
+            else -> null
+        }
+        sfx?.let { audio.play(it) }
+    }
+
+    private inline fun act(sfx: Sfx, block: (GameEngine) -> Boolean) {
+        val e = engine ?: return
+        if (block(e)) reactToEvents(sfx)
+        bump()
+    }
+
+    fun playTap() = audio.play(Sfx.TAP)
+
+    fun playCoin() = audio.play(Sfx.COIN)
+
+    fun selectTab(i: Int) {
+        if (tab != i) audio.play(Sfx.TAP)
+        tab = i
+    }
+
     // ───────────── Acciones ─────────────
 
     fun tap(id: String) {
-        engine?.tapDept(id)
+        if (engine?.tapDept(id) == true) audio.play(Sfx.TAP)
         bump()
     }
 
@@ -204,40 +275,58 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun buy(id: String) {
-        val e = engine ?: return
-        e.buyLevels(id, buyCount(id))
-        bump()
-    }
+    fun buy(id: String) = act(Sfx.BUY) { it.buyLevels(id, buyCount(id)) }
 
-    fun hire(id: String) {
-        engine?.hire(id)
-        bump()
-    }
+    fun hire(id: String) = act(Sfx.HIRE) { it.hire(id) }
 
-    fun train(id: String) {
-        engine?.train(id)
-        bump()
-    }
+    fun train(id: String) = act(Sfx.BUY) { it.train(id) }
 
-    fun upgradeEquipment(id: String) {
-        engine?.upgradeEquipment(id)
-        bump()
-    }
+    fun upgradeEquipment(id: String) = act(Sfx.BUY) { it.upgradeEquipment(id) }
 
-    fun buySoftware() {
-        engine?.buySoftware()
-        bump()
-    }
+    fun buySoftware() = act(Sfx.BUY) { it.buySoftware() }
 
-    fun moveOffice() {
-        engine?.moveOffice()
-        bump()
-    }
+    fun moveOffice() = act(Sfx.MOVE) { it.moveOffice() }
+
+    fun repair(incidentId: Int) = act(Sfx.BUY) { it.repair(incidentId) }
+
+    fun acceptInvitation(incidentId: Int) = act(Sfx.CORRECT) { it.acceptInvitation(incidentId) }
+
+    fun declineInvitation(incidentId: Int) = act(Sfx.TAP) { it.declineInvitation(incidentId) }
 
     fun answer(caseId: Int, option: Int) {
         val e = engine ?: return
-        lastCase = e.answerCase(caseId, option)
+        val r = e.answerCase(caseId, option) ?: return
+        lastCase = r
+        reactToEvents(if (r.correct) Sfx.CORRECT else Sfx.WRONG)
+        bump()
+    }
+
+    fun answerEntry(caseId: Int, accounts: List<String>) {
+        val e = engine ?: return
+        val r = e.answerEntry(caseId, accounts) ?: return
+        lastCase = r
+        reactToEvents(if (r.correct) Sfx.CORRECT else Sfx.WRONG)
+        bump()
+    }
+
+    /** Nombre propuesto para la siguiente gestoría: «Mi Gestoría II, S.L.», «III»... */
+    fun suggestedNextName(): String {
+        val n = (engine?.state?.prestigeCount ?: 0) + 2
+        return getApplication<Application>().getString(R.string.default_company_numbered, roman(n))
+    }
+
+    /** Traspasa la gestoría y empieza otra con los puntos de experiencia. */
+    fun prestige(newName: String) {
+        val e = engine ?: return
+        val name = newName.trim().ifEmpty { suggestedNextName() }
+        val ng = e.prestige(name) ?: return
+        engine = ng
+        soundSeq = ng.state.eventSeq
+        lastCase = null
+        tab = 0
+        celebration++
+        audio.play(Sfx.MOVE)
+        save()
         bump()
     }
 
@@ -263,11 +352,18 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun resetGame() {
-        engine = newEngine()
+        val e = newEngine()
+        soundSeq = e.state.eventSeq
+        engine = e
         offlineReport = null
         lastCase = null
         save()
         bump()
+    }
+
+    override fun onCleared() {
+        audio.release()
+        super.onCleared()
     }
 
     fun save() {

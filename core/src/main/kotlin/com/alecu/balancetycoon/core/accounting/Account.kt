@@ -22,6 +22,7 @@ enum class BsLine(val section: BsSection, val title: L) {
     PPE(BsSection.NON_CURRENT_ASSETS, L("Inmovilizado material", "Property, plant and equipment")),
     LT_INVESTMENTS(BsSection.NON_CURRENT_ASSETS, L("Inversiones financieras a largo plazo", "Long-term financial investments")),
     TRADE_RECEIVABLES(BsSection.CURRENT_ASSETS, L("Deudores comerciales y otras cuentas a cobrar", "Trade and other receivables")),
+    ST_INVESTMENTS(BsSection.CURRENT_ASSETS, L("Inversiones financieras a corto plazo", "Short-term financial investments")),
     CASH(BsSection.CURRENT_ASSETS, L("Efectivo y otros activos líquidos equivalentes", "Cash and cash equivalents")),
     CAPITAL(BsSection.EQUITY, L("Capital", "Share capital")),
     RESERVES(BsSection.EQUITY, L("Reservas", "Reserves")),
@@ -92,6 +93,7 @@ object Pgc {
         bs("2813", "Amortización acumulada de maquinaria", "Accumulated depreciation of machinery", Nature.CREDIT, BsLine.PPE),
         bs("2815", "Amortización acumulada de otras instalaciones", "Accumulated depreciation of other installations", Nature.CREDIT, BsLine.PPE),
         bs("2816", "Amortización acumulada de mobiliario", "Accumulated depreciation of furniture", Nature.CREDIT, BsLine.PPE),
+        bs("2818", "Amortización acumulada de elementos de transporte", "Accumulated depreciation of vehicles", Nature.CREDIT, BsLine.PPE),
         bs("2817", "Amortización acumulada de equipos para procesos de información", "Accumulated depreciation of IT equipment", Nature.CREDIT, BsLine.PPE),
         bs("260", "Fianzas constituidas a largo plazo", "Long-term deposits given", Nature.DEBIT, BsLine.LT_INVESTMENTS),
         // Grupo 4: Acreedores y deudores por operaciones comerciales
@@ -101,14 +103,18 @@ object Pgc {
         bs("465", "Remuneraciones pendientes de pago", "Salaries payable", Nature.CREDIT, BsLine.TRADE_PAYABLES),
         bs("4700", "Hacienda Pública, deudora por IVA", "VAT receivable from the Tax Agency", Nature.DEBIT, BsLine.TRADE_RECEIVABLES),
         bs("472", "Hacienda Pública, IVA soportado", "Input VAT", Nature.DEBIT, BsLine.TRADE_RECEIVABLES),
+        bs("473", "Hacienda Pública, retenciones y pagos a cuenta", "Withholdings and payments on account", Nature.DEBIT, BsLine.TRADE_RECEIVABLES),
         bs("4750", "Hacienda Pública, acreedora por IVA", "VAT payable", Nature.CREDIT, BsLine.TRADE_PAYABLES),
         bs("4751", "Hacienda Pública, acreedora por retenciones practicadas", "Withholdings payable", Nature.CREDIT, BsLine.TRADE_PAYABLES),
         bs("4752", "Hacienda Pública, acreedora por impuesto sobre sociedades", "Corporate tax payable", Nature.CREDIT, BsLine.TRADE_PAYABLES),
         bs("476", "Organismos de la Seguridad Social, acreedores", "Social Security payable", Nature.CREDIT, BsLine.TRADE_PAYABLES),
         bs("477", "Hacienda Pública, IVA repercutido", "Output VAT", Nature.CREDIT, BsLine.TRADE_PAYABLES),
         // Grupo 5: Cuentas financieras
+        bs("520", "Deudas a corto plazo con entidades de crédito", "Short-term bank loans", Nature.CREDIT, BsLine.ST_DEBT),
         bs("5201", "Deudas a corto plazo por crédito dispuesto", "Credit line drawn", Nature.CREDIT, BsLine.ST_DEBT),
         bs("526", "Dividendo activo a pagar", "Dividends payable", Nature.CREDIT, BsLine.ST_DEBT),
+        bs("540", "Inversiones financieras a corto plazo en instrumentos de patrimonio", "Short-term equity investments", Nature.DEBIT, BsLine.ST_INVESTMENTS),
+        bs("570", "Caja, euros", "Cash on hand", Nature.DEBIT, BsLine.CASH),
         bs("572", "Bancos e instituciones de crédito c/c vista, euros", "Bank current accounts", Nature.DEBIT, BsLine.CASH),
         // Grupo 6: Compras y gastos
         pyg("600", "Compras de mercaderías", "Purchases of goods for resale", Nature.DEBIT, PygLine.SUPPLIES),
@@ -138,6 +144,8 @@ object Pgc {
         pyg("700", "Ventas de mercaderías", "Sales of goods for resale", Nature.CREDIT, PygLine.REVENUE),
         pyg("701", "Ventas de productos terminados", "Sales of finished goods", Nature.CREDIT, PygLine.REVENUE),
         pyg("705", "Prestaciones de servicios", "Services rendered", Nature.CREDIT, PygLine.REVENUE),
+        pyg("760", "Ingresos de participaciones en instrumentos de patrimonio", "Income from equity investments", Nature.CREDIT, PygLine.FINANCIAL_INCOME),
+        pyg("769", "Otros ingresos financieros", "Other finance income", Nature.CREDIT, PygLine.FINANCIAL_INCOME),
     )
 
     private val byCode: Map<String, Account> = all.associateBy { it.code }

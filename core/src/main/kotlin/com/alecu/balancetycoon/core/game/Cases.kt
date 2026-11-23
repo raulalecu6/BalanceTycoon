@@ -2,21 +2,30 @@ package com.alecu.balancetycoon.core.game
 
 import com.alecu.balancetycoon.core.i18n.L
 
+/** Datos comunes de cualquier consulta: la pregunta de opción múltiple y la de asiento. */
+interface ClientCase {
+    val id: String
+    val dept: String
+    val minTier: Int
+    val emoji: String
+    val client: L
+}
+
 /**
  * Consulta de un cliente. La primera opción de [options] es siempre la correcta; el motor
  * las baraja al crear cada consulta. Los clientes son ficticios.
  */
 data class CaseTemplate(
-    val id: String,
-    val dept: String,
+    override val id: String,
+    override val dept: String,
     /** Tipo de cliente mínimo (reputación) para que aparezca. */
-    val minTier: Int,
-    val emoji: String,
-    val client: L,
+    override val minTier: Int,
+    override val emoji: String,
+    override val client: L,
     val question: L,
     val options: List<L>,
     val explanation: L,
-) {
+) : ClientCase {
     init {
         require(options.size == 4) { "La consulta $id debe tener cuatro opciones" }
     }

@@ -56,7 +56,10 @@ class Obligation(
     val isPaid: Boolean get() = paidDay != null
 }
 
-/** Consulta de un cliente pendiente de resolver. [order] es el orden barajado de las opciones. */
+/**
+ * Consulta de un cliente pendiente de resolver: de opción múltiple ([quiz]) o de asiento ([entry]).
+ * [order] es el orden barajado de las opciones o de las cuentas candidatas.
+ */
 class PendingCase(
     val id: Int,
     val templateId: String,
@@ -66,8 +69,15 @@ class PendingCase(
     /** Tipo de cliente con el que llegó (fija la reputación que da). */
     val tier: Int,
     val order: List<Int>,
+    /** Base de los importes de una consulta de asiento. */
+    val base: Long = 0L,
+    /** Cliente VIP: paga el triple, pero se va si no se le responde en pocos días. */
+    val vip: Boolean = false,
 ) {
-    val template: CaseTemplate get() = Cases.get(templateId)
+    val quiz: CaseTemplate? get() = Cases.find(templateId)
+    val entry: EntryCaseTemplate? get() = EntryCases.find(templateId)
+    val info: ClientCase get() = quiz ?: entry ?: throw IllegalStateException("Consulta desconocida: $templateId")
+    val isEntry: Boolean get() = entry != null
 }
 
 /** Beneficio de un ejercicio cerrado pendiente de que la junta acuerde su aplicación. */
@@ -86,7 +96,7 @@ class YearSummary(
     val lossesOffset: Long,
 )
 
-enum class EventKind { INFO, GOOD, WARNING, TAX }
+enum class EventKind { INFO, GOOD, WARNING, TAX, MILESTONE }
 
 class GameEvent(val seq: Long, val day: Long, val text: L, val kind: EventKind)
 
@@ -126,6 +136,16 @@ class GameState(val startYear: Int) {
     var casesCorrect: Int = 0
     var casesWrong: Int = 0
     var casesAuto: Int = 0
+    var vipLost: Int = 0
+
+    // Imprevistos (las temporadas del calendario no se guardan: se calculan por la fecha)
+    val incidents: MutableList<Incident> = mutableListOf()
+    var nextIncidentId: Int = 1
+    var nextIncidentDay: Long = day + 25
+
+    // Prestigio: puntos de experiencia de las gestorías anteriores (+10 % de honorarios cada uno)
+    var experience: Int = 0
+    var prestigeCount: Int = 0
 
     var boostUntil: Double = 0.0
     var rngState: Long = 88172645463325252L

@@ -160,5 +160,53 @@
     <string name="confirm">Confirmar</string>
     <string name="close">Cerrar</string>
     <string name="about_title">Acerca de</string>
-    <string name="about_body">Prototipo 0.2 de Raúl Marian Alecu. La contabilidad sigue el PGC PYMES y la normativa fiscal de 2026 de forma simplificada; los clientes son ficticios. No constituye asesoramiento fiscal ni contable. Fuente Pixelify Sans (SIL Open Font License 1.1).</string>
+    <string name="about_body">Versión 0.3 de Raúl Marian Alecu. La contabilidad sigue el PGC PYMES y la normativa fiscal de 2026 de forma simplificada; los clientes son ficticios. No constituye asesoramiento fiscal ni contable. Música y efectos de sonido generados por código. Fuente Pixelify Sans (SIL Open Font License 1.1).</string>
+    <!-- 0.3: temporadas e imprevistos -->
+    <string name="default_company_numbered">Mi Gestoría %1$s, S.L.</string>
+    <string name="season_dates">Temporada del %1$s al %2$s.</string>
+    <string name="breakdown_title">💥 Avería en %1$s</string>
+    <string name="breakdown_body">Los ordenadores de %1$s han dejado de funcionar y el departamento factura la mitad. El servicio técnico de la garantía vendrá el %2$s; si no quieres esperar, un técnico lo arregla hoy por %3$s + IVA (cuenta 622, Reparaciones y conservación).</string>
+    <string name="breakdown_repair">Reparar ya</string>
+    <string name="flu_title">🤧 Gripe en %1$s</string>
+    <string name="flu_body">Parte de la plantilla de %1$s está de baja y el departamento factura un 25 %% menos hasta el %2$s.\n\nEn la incapacidad temporal por enfermedad común, los tres primeros días no se cobra prestación (salvo mejora del convenio); del 4.º al 15.º la paga la empresa y, desde el 16.º, la Seguridad Social o la mutua.</string>
+    <string name="networking_title">🤝 Jornada de networking</string>
+    <string name="networking_body">La Cámara de Comercio organiza una jornada para empresarios de la zona. La inscripción y el viaje cuestan %1$s + IVA (cuenta 627, Publicidad, propaganda y relaciones públicas) y, si vas, ganas %2$d puntos de reputación. La invitación caduca el %3$s.</string>
+    <string name="networking_go">Ir a la jornada</string>
+    <string name="networking_skip">No ir</string>
+
+    <!-- 0.3: clientes VIP y consultas de asiento -->
+    <string name="experience_line">🎓 Experiencia: %1$d puntos (+%2$d %% en todos los ingresos)</string>
+    <string name="vip_badge">⭐ VIP · %1$d d</string>
+    <string name="vip_hint">Cliente VIP: paga el triple, pero se irá a otra gestoría si no le respondes a tiempo (−2 de reputación).</string>
+    <string name="entry_badge">📒 Asiento</string>
+    <string name="entry_hint">Toca una línea del asiento y elige su cuenta. Los importes ya están puestos.</string>
+    <string name="entry_account">Cuenta</string>
+    <string name="entry_pick">¿Qué cuenta?</string>
+    <string name="entry_credit_prefix">"a "</string>
+    <string name="entry_clear">Borrar</string>
+    <string name="entry_submit">Entregar asiento</string>
+    <string name="entry_correct">Asiento correcto:</string>
+    <string name="entry_you_put">Pusiste %1$s</string>
+
+    <!-- 0.3: traspaso (prestigio) -->
+    <string name="prestige_title">Traspasar la gestoría</string>
+    <string name="prestige_body" formatted="false">Vende las participaciones de la sociedad y funda otra gestoría desde cero. Lo aprendido se queda contigo: cada punto de experiencia suma un 10 % a todos los ingresos para siempre.</string>
+    <string name="prestige_current">Gestoría n.º %1$d · %2$d puntos de experiencia (×%3$s)</string>
+    <string name="prestige_points">Puntos que ganarías ahora: %1$d</string>
+    <string name="prestige_sale">Precio de venta (patrimonio neto): %1$s</string>
+    <string name="prestige_multiplier">Ingresos: ×%1$s → ×%2$s</string>
+    <string name="prestige_next_point">Siguiente punto al facturar %1$s en total (llevas %2$s).</string>
+    <string name="prestige_need_office">Disponible desde la oficina «%1$s».</string>
+    <string name="prestige_need_sales">Necesitas haber facturado al menos %1$s.</string>
+    <string name="prestige_btn">Traspasar y empezar de nuevo</string>
+    <string name="prestige_confirm_title">¿Traspasar la gestoría?</string>
+    <string name="prestige_confirm_body">Venderás %1$s por %2$s, que pasan a tu patrimonio personal. La nueva sociedad empieza el 1 de enero de %3$d con %4$d puntos de experiencia: ingresos ×%5$s para siempre. Se pierden la oficina, la plantilla, los equipos, los clientes y la reputación.</string>
+    <string name="prestige_new_name">Nombre de la nueva gestoría</string>
+    <string name="prestige_confirm_btn">Traspasar</string>
+
+    <!-- 0.3: ajustes -->
+    <string name="settings_generation">Gestoría n.º %1$d · %2$d puntos de experiencia</string>
+    <string name="settings_music">Música</string>
+    <string name="settings_sound">Efectos de sonido</string>
+    <string name="settings_vibration">Vibración</string>
 </resources>

@@ -6,7 +6,10 @@ import com.alecu.balancetycoon.core.calendar.GameDate
 import com.alecu.balancetycoon.core.game.Cases
 import com.alecu.balancetycoon.core.game.DeptState
 import com.alecu.balancetycoon.core.game.Departments
+import com.alecu.balancetycoon.core.game.EntryCases
 import com.alecu.balancetycoon.core.game.EventKind
+import com.alecu.balancetycoon.core.game.Incident
+import com.alecu.balancetycoon.core.game.IncidentKind
 import com.alecu.balancetycoon.core.game.GameEvent
 import com.alecu.balancetycoon.core.game.GameState
 import com.alecu.balancetycoon.core.game.Obligation
@@ -26,9 +29,11 @@ class IncompatibleSaveException(message: String) : Exception(message)
  * Convierte la partida en JSON y viceversa. El campo "v" es la versión del formato:
  * si en el futuro cambia, aquí se migrarán las partidas antiguas.
  * La versión 1 era el prototipo de tiendas y no se puede convertir en una gestoría.
+ * La versión 3 añade las consultas de asiento, los clientes VIP, los imprevistos y el prestigio;
+ * las partidas de la versión 2 se cargan con esos datos vacíos.
  */
 object SaveCodec {
-    const val FORMAT_VERSION = 2L
+    const val FORMAT_VERSION = 3L
 
     fun encode(s: GameState): String {
         val led = s.ledger
@@ -76,14 +81,27 @@ object SaveCodec {
         m["reputation"] = s.reputation
         m["bestTier"] = s.bestTier.toLong()
         m["cases"] = s.cases.map { c ->
-            mapOf("id" to c.id.toLong(), "t" to c.templateId, "day" to c.arrivalDay, "fee" to c.fee, "tier" to c.tier.toLong(), "order" to c.order.map { it.toLong() })
+            mapOf(
+                "id" to c.id.toLong(), "t" to c.templateId, "day" to c.arrivalDay, "fee" to c.fee, "tier" to c.tier.toLong(),
+                "order" to c.order.map { it.toLong() }, "base" to c.base, "vip" to c.vip,
+            )
         }
         m["nextCaseId"] = s.nextCaseId.toLong()
         m["nextCaseDay"] = s.nextCaseDay
         m["recentCases"] = s.recentCases.toList()
         m["streak"] = s.streak.toLong()
         m["bestStreak"] = s.bestStreak.toLong()
-        m["casesStats"] = listOf(s.casesCorrect.toLong(), s.casesWrong.toLong(), s.casesAuto.toLong())
+        m["casesStats"] = listOf(s.casesCorrect.toLong(), s.casesWrong.toLong(), s.casesAuto.toLong(), s.vipLost.toLong())
+        m["incidents"] = s.incidents.map {
+            mapOf(
+                "id" to it.id.toLong(), "kind" to it.kind.name, "dept" to it.dept, "start" to it.startDay, "end" to it.endDay,
+                "cost" to it.cost, "reward" to it.reward,
+            )
+        }
+        m["nextIncidentId"] = s.nextIncidentId.toLong()
+        m["nextIncidentDay"] = s.nextIncidentDay
+        m["experience"] = s.experience.toLong()
+        m["prestigeCount"] = s.prestigeCount.toLong()
         m["boostUntil"] = s.boostUntil
         m["rng"] = s.rngState
         m["prevIncn"] = s.prevYearIncn
@@ -188,8 +206,16 @@ object SaveCodec {
         for (x in m["cases"] as List<Any?>) {
             val cm = x as Map<String, Any?>
             val id = cm["t"] as String
-            if (Cases.find(id) == null) continue // consulta retirada en una versión nueva
-            s.cases.add(PendingCase(cm.int("id"), id, cm.long("day"), cm.long("fee"), cm.int("tier"), (cm["order"] as List<Any?>).map { (it as Number).toInt() }))
+            val entry = EntryCases.find(id)
+            if (Cases.find(id) == null && entry == null) continue // consulta retirada en una versión nueva
+            val order = (cm["order"] as List<Any?>).map { (it as Number).toInt() }
+            if (entry != null && order.sorted() != entry.candidates.indices.toList()) continue // plantilla cambiada
+            s.cases.add(
+                PendingCase(
+                    cm.int("id"), id, cm.long("day"), cm.long("fee"), cm.int("tier"), order,
+                    cm.longOr("base", 0L), (cm["vip"] as Boolean?) ?: false,
+                ),
+            )
         }
         s.nextCaseId = m.int("nextCaseId")
         s.nextCaseDay = m.long("nextCaseDay")
@@ -200,6 +226,19 @@ object SaveCodec {
         s.casesCorrect = (cs[0] as Number).toInt()
         s.casesWrong = (cs[1] as Number).toInt()
         s.casesAuto = (cs[2] as Number).toInt()
+        s.vipLost = (cs.getOrNull(3) as Number?)?.toInt() ?: 0
+        for (x in (m["incidents"] as List<Any?>?).orEmpty()) {
+            val im = x as Map<String, Any?>
+            val dept = im["dept"] as String?
+            if (dept != null && dept !in s.depts) continue
+            s.incidents.add(
+                Incident(im.int("id"), IncidentKind.valueOf(im["kind"] as String), dept, im.long("start"), im.long("end"), im.long("cost"), im.long("reward")),
+            )
+        }
+        s.nextIncidentId = m.longOr("nextIncidentId", 1L).toInt()
+        s.nextIncidentDay = m.longOr("nextIncidentDay", s.day + 25)
+        s.experience = m.longOr("experience", 0L).toInt()
+        s.prestigeCount = m.longOr("prestigeCount", 0L).toInt()
         s.boostUntil = m.double("boostUntil")
         s.rngState = m.long("rng")
         s.prevYearIncn = m.long("prevIncn")
@@ -233,6 +272,7 @@ object SaveCodec {
     }
 
     private fun Map<String, Any?>.long(key: String): Long = (this[key] as Number).toLong()
+    private fun Map<String, Any?>.longOr(key: String, default: Long): Long = (this[key] as Number?)?.toLong() ?: default
     private fun Map<String, Any?>.int(key: String): Int = (this[key] as Number).toInt()
     private fun Map<String, Any?>.double(key: String): Double = (this[key] as Number).toDouble()
 }
